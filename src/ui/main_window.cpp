@@ -11,6 +11,9 @@
 
 #include "ui/search_bar.h"
 
+// Space around the search bar and results box
+static constexpr int MARGIN = 10;
+
 // Plain-text version of the results, like japanese-helper's output box:
 //
 //   兄弟 (きょうだい)
@@ -57,8 +60,8 @@ MainWindow::MainWindow(){
     search_bar->callback(on_search, this);
 
     // Fills the space under the bar, same width
-    const int results_y = bar_y + search_bar->h() + 20;
-    results = new Fl_Text_Display(bar_x, results_y, bar_w, win.h() - results_y - 20);
+    const int results_y = bar_y + search_bar->h() + MARGIN;
+    results = new Fl_Text_Display(bar_x, results_y, bar_w, win.h() - results_y - MARGIN);
     results->buffer(&results_buf);
     results->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
     results->hide();    // Shown by move_bar_to_top() on the first search
@@ -113,13 +116,13 @@ void MainWindow::on_search_done(void* data){
 // Like Google: the bar starts in the middle and jumps to the top on the
 // first search, and the results box appears in the space under it.
 void MainWindow::move_bar_to_top(){
-    const int top = 20;
+    const int top = MARGIN;
     if (search_bar->y() == top) return;
 
     // Moving a group moves its children (input, buttons) along with it
     search_bar->position(search_bar->x(), top);
-    const int results_y = top + search_bar->h() + 20;
-    results->resize(results->x(), results_y, results->w(), win.h() - results_y - 20);
+    const int results_y = top + search_bar->h() + MARGIN;
+    results->resize(results->x(), results_y, results->w(), win.h() - results_y - MARGIN);
     results->show();
     win.redraw();
 }
