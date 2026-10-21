@@ -7,6 +7,10 @@
 // included in main_window.cpp instead.
 class Fl_Input;
 class Fl_Button;
+class Fl_Widget;
+
+// Same APIs as japanese-helper. Order matches the API menu.
+enum class Api { Jisho, DeepL, MyMemory };
 
 class MainWindow {
 public:
@@ -27,4 +31,11 @@ private:
     // deletes them when it dies. MainWindow only keeps a handle to them.
     Fl_Input* search_input = nullptr;
     Fl_Button* search_btn = nullptr;
+    Fl_Button* api_btn = nullptr;
+
+    Api api = Api::Jisho;
+
+    // Static because FLTK callbacks are plain functions; the MainWindow
+    // comes in through data.
+    static void on_api_btn(Fl_Widget* w, void* data);
 };
