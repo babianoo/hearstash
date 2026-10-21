@@ -5,6 +5,8 @@ project(prototype CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Wextra)
+# Write build/compile_commands.json so clangd knows the include paths
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- Dependencies (must be installed on the system) ---
 find_package(PkgConfig REQUIRED)
@@ -16,7 +18,8 @@ pkg_check_modules(CAIRO QUIET cairo)
 # Add new source files here, by path from the project root.
 add_executable(prototype
     src/main.cpp
-    src/app_state.cpp
+    src/ui/main_window.cpp
+    src/ui/theme.cpp
 )
 
 # Includes are written from src/, e.g. #include "core/anki/anki_connect.h"
