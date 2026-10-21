@@ -19,6 +19,7 @@ pkg_check_modules(CAIRO QUIET cairo)
 add_executable(prototype
     src/main.cpp
     src/ui/main_window.cpp
+    src/ui/search_bar.cpp
     src/ui/theme.cpp
 )
 
