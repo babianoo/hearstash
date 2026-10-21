@@ -3,6 +3,9 @@
 #include <string>
 #include <string_view>
 
+// Sets up libcurl. Call once in main(), before starting any threads.
+void http_global_init();
+
 // Blocking HTTP GET that returns the response body.
 // Throws std::runtime_error on network failure or a non-2xx status.
 std::string http_get(const std::string& url);

@@ -27,6 +27,14 @@ static size_t write_callback(char* data, size_t size, size_t nmemb, void* out){
     return size * nmemb;
 }
 
+void http_global_init(){
+    // Otherwise the first curl_easy_init() does it, which isn't safe if two
+    // threads get there at once. Never cleaned up: search threads may
+    // still be running when main() returns, and the OS frees it anyway.
+    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
+        throw std::runtime_error("curl_global_init failed");
+}
+
 std::string http_get(const std::string& url){
     CurlHandle curl = make_handle();
     std::string body;
