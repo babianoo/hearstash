@@ -11,6 +11,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # --- Dependencies (must be installed on the system) ---
 find_package(PkgConfig REQUIRED)
 find_package(FLTK REQUIRED)
+find_package(CURL REQUIRED)
+find_package(nlohmann_json 3.11 REQUIRED)
 # System FLTK may be built with cairo support, so its public header needs
 # cairo.h even though we don't use cairo directly.
 pkg_check_modules(CAIRO QUIET cairo)
@@ -18,6 +20,8 @@ pkg_check_modules(CAIRO QUIET cairo)
 # Add new source files here, by path from the project root.
 add_executable(prototype
     src/main.cpp
+    src/core/http.cpp
+    src/core/jisho.cpp
     src/ui/main_window.cpp
     src/ui/search_bar.cpp
     src/ui/theme.cpp
@@ -29,4 +33,8 @@ target_include_directories(prototype PRIVATE
     ${FLTK_INCLUDE_DIR}
     ${CAIRO_INCLUDE_DIRS}
 )
-target_link_libraries(prototype PRIVATE ${FLTK_LIBRARIES})
+target_link_libraries(prototype PRIVATE
+    ${FLTK_LIBRARIES}
+    CURL::libcurl
+    nlohmann_json::nlohmann_json
+)
