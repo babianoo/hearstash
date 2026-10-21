@@ -1,13 +1,8 @@
 #pragma once
 
-// FLTK
-#include <FL/Enumerations.H>
-
-// Pill-shaped box with room for the text. Its text inset is sized for
-// widgets PILL_H tall.
-inline constexpr Fl_Boxtype PILL_BOX = FL_FREE_BOXTYPE;
+// Height of pill-shaped widgets like the search bar.
 inline constexpr int PILL_H = 30;
 
-// Sets the FLTK scheme and registers the custom boxtypes above.
+// Sets the FLTK scheme.
 // Call once in main(), before any window is created.
 void init_theme();
