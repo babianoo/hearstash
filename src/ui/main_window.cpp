@@ -61,6 +61,7 @@ MainWindow::MainWindow(){
     results = new Fl_Text_Display(bar_x, results_y, bar_w, win.h() - results_y - 20);
     results->buffer(&results_buf);
     results->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
+    results->hide();    // Shown by move_bar_to_top() on the first search
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
     win.end();
@@ -75,6 +76,8 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 
     std::string keyword = self->search_bar->text();
     if (keyword.find_first_not_of(" \t") == std::string::npos) return;
+
+    self->move_bar_to_top();
 
     if (self->search_bar->api() != Api::Jisho){
         self->results_buf.text("Only Jisho is connected so far.");
@@ -105,6 +108,20 @@ void MainWindow::on_search_done(void* data){
     // unique_ptr so result is deleted when this returns
     std::unique_ptr<SearchResult> result(static_cast<SearchResult*>(data));
     result->win->show_result(*result);
+}
+
+// Like Google: the bar starts in the middle and jumps to the top on the
+// first search, and the results box appears in the space under it.
+void MainWindow::move_bar_to_top(){
+    const int top = 20;
+    if (search_bar->y() == top) return;
+
+    // Moving a group moves its children (input, buttons) along with it
+    search_bar->position(search_bar->x(), top);
+    const int results_y = top + search_bar->h() + 20;
+    results->resize(results->x(), results_y, results->w(), win.h() - results_y - 20);
+    results->show();
+    win.redraw();
 }
 
 void MainWindow::show_result(const SearchResult& result){

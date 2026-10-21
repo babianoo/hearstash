@@ -60,5 +60,6 @@ private:
     // Runs on the UI thread, called by Fl::awake() from a search thread
     static void on_search_done(void* data);
 
+    void move_bar_to_top();
     void show_result(const SearchResult& result);
 };
