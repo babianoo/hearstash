@@ -7,7 +7,10 @@
 #include <FL/Fl_Input.H>
 #include <FL/Fl_Button.H>
 #include <FL/Fl_Menu_Item.H>
+#include <FL/Fl_Multi_Label.H>
+#include <FL/Fl_SVG_Image.H>
 
+#include "ui/icons.h"
 #include "ui/theme.h"
 
 // Indexed by Api
@@ -56,7 +59,7 @@ SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
     divider->box(FL_FLAT_BOX);
     divider->color(fl_color_average(FL_BACKGROUND2_COLOR, FL_FOREGROUND_COLOR, 0.85f));
 
-    // "+" that opens the API menu. No box, so the pill shows through; it
+    // "+" that opens the menu (Record Input, API). No box, so the pill shows through; it
     // only draws a round grey circle while pressed. (A white FL_FLAT_BOX
     // would be square and cover the pill's curved edge.) The tooltip shows
     // the current API.
@@ -78,19 +81,39 @@ void SearchBar::on_api_btn(Fl_Widget* w, void* data){
     SearchBar* self = static_cast<SearchBar*>(data);
     const int current = static_cast<int>(self->current_api);
 
+    // Record Input, a divider, then one item per API.
     // Rebuilt on every click so the radio check follows the current API.
     // Zeroed first: the extra all-zero item marks the end of the menu.
-    Fl_Menu_Item items[std::size(API_NAMES) + 1]{};
+    constexpr int RECORD = 0, FIRST_API = 1;
+    Fl_Menu_Item items[FIRST_API + std::size(API_NAMES) + 1]{};
+
+    // Made once and kept for the whole program; menus only borrow it.
+    static Fl_SVG_Image* mic_icon = []{
+        auto* icon = new Fl_SVG_Image(nullptr, ICON_MIC);
+        icon->scale(16, 16);
+        return icon;
+    }();
+
+    // Icon and text side by side. Only needs to live until popup() returns.
+    Fl_Multi_Label record_label{};
+    record_label.labela = reinterpret_cast<const char*>(mic_icon);
+    record_label.typea = FL_IMAGE_LABEL;
+    record_label.labelb = "  Record Input";
+    record_label.typeb = FL_NORMAL_LABEL;
+    items[RECORD].multi_label(&record_label);
+    // Greyed out until speech-to-text is added to the project
+    items[RECORD].flags = FL_MENU_INACTIVE | FL_MENU_DIVIDER;
+
     for (int i = 0; i < static_cast<int>(std::size(API_NAMES)); ++i){
-        items[i].label(API_NAMES[i]);
-        items[i].flags = FL_MENU_RADIO | (i == current ? FL_MENU_VALUE : 0);
+        items[FIRST_API + i].label(API_NAMES[i]);
+        items[FIRST_API + i].flags = FL_MENU_RADIO | (i == current ? FL_MENU_VALUE : 0);
     }
 
     // Opens just below the button. nullptr if the user clicks away.
-    const Fl_Menu_Item* picked = items->popup(w->x(), w->y() + w->h(), nullptr, &items[current]);
-    if (picked == nullptr) return;
+    const Fl_Menu_Item* picked = items->popup(w->x(), w->y() + w->h(), nullptr, &items[FIRST_API + current]);
+    if (picked == nullptr || picked == &items[RECORD]) return;
 
-    const int index = static_cast<int>(picked - items);
+    const int index = static_cast<int>(picked - items) - FIRST_API;
     self->current_api = static_cast<Api>(index);
     w->tooltip(API_NAMES[index]);
 }
