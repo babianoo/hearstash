@@ -24,7 +24,9 @@ add_executable(prototype
     src/core/jisho.cpp
     src/ui/main_window.cpp
     src/ui/search_bar.cpp
+    src/ui/smooth_scroll.cpp
     src/ui/theme.cpp
+    src/ui/wrapped_text.cpp
 )
 
 # Includes are written from src/, e.g. #include "core/anki/anki_connect.h"

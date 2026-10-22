@@ -7,9 +7,10 @@
 
 // FLTK
 #include <FL/Fl.H>
-#include <FL/Fl_Text_Display.H>
 
 #include "ui/search_bar.h"
+#include "ui/smooth_scroll.h"
+#include "ui/wrapped_text.h"
 
 // Space around the search bar and results box
 static constexpr int MARGIN = 10;
@@ -61,9 +62,12 @@ MainWindow::MainWindow(){
 
     // Fills the space under the bar, same width
     const int results_y = bar_y + search_bar->h() + MARGIN;
-    results = new Fl_Text_Display(bar_x, results_y, bar_w, win.h() - results_y - MARGIN);
-    results->buffer(&results_buf);
-    results->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
+    results = new SmoothScroll(bar_x, results_y, bar_w, win.h() - results_y - MARGIN);
+    // Inside the box's border, and stops before the scrollbar
+    results_text = new WrappedText(bar_x + Fl::box_dx(results->box()),
+                                   results_y + Fl::box_dy(results->box()),
+                                   results->content_w());
+    results->end();
     results->hide();    // Shown by move_bar_to_top() on the first search
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
@@ -83,11 +87,11 @@ void MainWindow::on_search(Fl_Widget*, void* data){
     self->move_bar_to_top();
 
     if (self->search_bar->api() != Api::Jisho){
-        self->results_buf.text("Only Jisho is connected so far.");
+        self->show_text("Only Jisho is connected so far.");
         return;
     }
 
-    self->results_buf.text(std::format("Searching for {}...", keyword).c_str());
+    self->show_text(std::format("Searching for {}...", keyword));
     const unsigned id = ++self->latest_search;
 
     // The request can take seconds, and FLTK only redraws between
@@ -132,9 +136,16 @@ void MainWindow::show_result(const SearchResult& result){
     if (result.id != latest_search) return;
 
     if (!result.error.empty())
-        results_buf.text(std::format("Search failed: {}", result.error).c_str());
+        show_text(std::format("Search failed: {}", result.error));
     else if (result.entries.empty())
-        results_buf.text(std::format("No results for {}.", result.keyword).c_str());
+        show_text(std::format("No results for {}.", result.keyword));
     else
-        results_buf.text(format_entries(result.entries).c_str());
+        show_text(format_entries(result.entries));
+}
+
+void MainWindow::show_text(std::string_view text){
+    results->scroll_to_top();
+    results_text->text(text);
+    // Its scrollbar depends on the new text's height
+    results->redraw();
 }

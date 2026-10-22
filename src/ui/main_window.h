@@ -2,18 +2,19 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // FLTK
 #include <FL/Fl_Double_Window.H>
-#include <FL/Fl_Text_Buffer.H>
 
 #include "core/jisho.h"
 
 // Only pointers to these are stored here, so the full headers are
 // included in main_window.cpp instead.
 class SearchBar;
-class Fl_Text_Display;
+class SmoothScroll;
+class WrappedText;
 class Fl_Widget;
 
 class MainWindow {
@@ -36,10 +37,6 @@ private:
         std::string error{};    // Non-empty if the search failed
     };
 
-    // Declared before win so it's destroyed after it: the text display
-    // (a child of win) still uses the buffer while it's being deleted.
-    Fl_Text_Buffer results_buf;
-
     // Owned by MainWindow as a member, so no new/delete anywhere.
     // When MainWindow dies, win dies and deletes all of its children.
     Fl_Double_Window win{900, 600, "Prototype"};
@@ -47,8 +44,10 @@ private:
     // Created with new in the constructor and added to win, which
     // deletes them when it dies. MainWindow only keeps a handle to them.
     SearchBar* search_bar = nullptr;
-    // Placeholder until the results UI is designed
-    Fl_Text_Display* results = nullptr;
+    // Placeholder until the results UI is designed: one block of text in
+    // a scroll. results_text is results' only child.
+    SmoothScroll* results = nullptr;
+    WrappedText* results_text = nullptr;
 
     // Bumped on every search. Only the latest search's result is shown,
     // so a slow earlier search can't overwrite a newer one.
@@ -61,5 +60,7 @@ private:
     static void on_search_done(void* data);
 
     void move_bar_to_top();
+    // Replaces what the results area shows, scrolled back to the top
+    void show_text(std::string_view text);
     void show_result(const SearchResult& result);
 };
