@@ -21,6 +21,7 @@ pkg_check_modules(CAIRO QUIET cairo)
 add_executable(prototype
     src/main.cpp
     src/core/http.cpp
+    src/core/deepl.cpp
     src/core/jisho.cpp
     src/ui/main_window.cpp
     src/ui/search_bar.cpp
