@@ -10,7 +10,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- Dependencies (must be installed on the system) ---
 find_package(PkgConfig REQUIRED)
-find_package(FLTK REQUIRED)
+# Prefer FLTK's own CMake package (1.4+): its targets also link FLTK's
+# dependencies (bundled zlib/png/jpeg, gdiplus on Windows). Fall back to
+# CMake's FindFLTK module when FLTK was installed without it.
+find_package(FLTK CONFIG QUIET)
+if(NOT FLTK_FOUND)
+    find_package(FLTK REQUIRED)
+endif()
 find_package(CURL REQUIRED)
 find_package(nlohmann_json 3.11 REQUIRED)
 # System FLTK may be built with cairo support, so its public header needs
