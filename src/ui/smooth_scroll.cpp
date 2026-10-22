@@ -6,8 +6,8 @@
 // FLTK
 #include <FL/Fl.H>
 
-// Pixels scrolled per wheel notch, about 3 lines of text
-static constexpr int WHEEL_STEP = 60;
+// Pixels scrolled per wheel notch, about 1 line of text
+static constexpr int WHEEL_STEP = 8;
 // Seconds between animation frames (60 fps)
 static constexpr double TICK = 1.0 / 60;
 
