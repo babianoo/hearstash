@@ -35,27 +35,57 @@ void http_global_init(){
         throw std::runtime_error("curl_global_init failed");
 }
 
-std::string http_get(const std::string& url){
-    CurlHandle curl = make_handle();
+// curl_slist is curl's linked list of header lines
+using CurlHeaders = std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)>;
+
+// Sends the request set up on curl and returns the body.
+static std::string perform(CURL* curl, const std::string& url){
     std::string body;
 
     // libcurl is a C library, so it takes C strings
-    curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_USERAGENT, USER_AGENT);
-    curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 10L);
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &body);
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
 
-    CURLcode res = curl_easy_perform(curl.get());
+    CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) throw std::runtime_error(curl_easy_strerror(res));
 
     long status = 0;
-    curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     if (status < 200 || status >= 300)
-        throw std::runtime_error(std::format("HTTP {} from {}", status, url));
+        throw HttpError(status, std::format("HTTP {} from {}", status, url));
 
     return body;
+}
+
+std::string http_get(const std::string& url){
+    CurlHandle curl = make_handle();
+    return perform(curl.get(), url);
+}
+
+std::string http_post(const std::string& url, const std::string& body,
+                      const std::vector<std::string>& headers){
+    CurlHandle curl = make_handle();
+
+    CurlHeaders list(nullptr, curl_slist_free_all);
+    for (const std::string& header : headers){
+        // Returns the list's head: a new node the first time, the same
+        // one after that. On failure the old list is left as it was.
+        curl_slist* head = curl_slist_append(list.get(), header.c_str());
+        if (!head) throw std::runtime_error("curl_slist_append failed");
+        list.release();
+        list.reset(head);
+    }
+
+    // Setting a body makes it a POST. curl copies neither, so body and
+    // list have to live until perform() returns.
+    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, list.get());
+    return perform(curl.get(), url);
 }
 
 std::string url_encode(std::string_view text){
