@@ -8,6 +8,7 @@
 
 // FLTK
 #include <FL/Fl.H>
+#include <FL/fl_ask.H>
 #include <FL/Fl_Button.H>
 #include <FL/Fl_SVG_Image.H>
 
@@ -107,23 +108,28 @@ void MainWindow::on_search(Fl_Widget*, void* data){
     std::string keyword = self->search_bar->text();
     if (keyword.find_first_not_of(" \t") == std::string::npos) return;
 
-    self->move_bar_to_top();
-
     const Api api = self->search_bar->api();
-    if (api == Api::MyMemory){
-        self->show_text("MyMemory isn't connected yet.");
-        return;
-    }
 
-    // From the environment until there's a settings window
+    // From the environment until there's a settings window. Checked before
+    // anything changes on screen: without a key there's no search at all.
     std::string deepl_key;
     if (api == Api::DeepL){
         const char* key = std::getenv("DEEPL_API_KEY");
         if (key == nullptr || *key == '\0'){
-            self->show_text("Set the DEEPL_API_KEY environment variable to use DeepL.");
+            // Modal: waits for OK before returning
+            fl_alert("No DeepL API key found.\n\n"
+                     "Input the DeepL key in the settings or "
+                     "set the DEEPL_API_KEY environment variable to use DeepL.");
             return;
         }
         deepl_key = key;
+    }
+
+    self->move_bar_to_top();
+
+    if (api == Api::MyMemory){
+        self->show_text("MyMemory isn't connected yet.");
+        return;
     }
 
     self->show_text(std::format("Searching for {}...", keyword));
