@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -33,7 +34,8 @@ private:
         MainWindow* win;
         unsigned id;
         std::string keyword;
-        std::vector<JishoEntry> entries{};
+        std::vector<JishoEntry> entries{};          // Jisho
+        std::optional<std::string> translation{};   // DeepL
         std::string error{};    // Non-empty if the search failed
     };
 

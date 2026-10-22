@@ -1,5 +1,6 @@
 #include "ui/main_window.h"
 
+#include <cstdlib>
 #include <format>
 #include <stdexcept>
 #include <string_view>
@@ -8,6 +9,7 @@
 // FLTK
 #include <FL/Fl.H>
 
+#include "core/deepl.h"
 #include "ui/search_bar.h"
 #include "ui/smooth_scroll.h"
 #include "ui/wrapped_text.h"
@@ -86,9 +88,21 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 
     self->move_bar_to_top();
 
-    if (self->search_bar->api() != Api::Jisho){
-        self->show_text("Only Jisho is connected so far.");
+    const Api api = self->search_bar->api();
+    if (api == Api::MyMemory){
+        self->show_text("MyMemory isn't connected yet.");
         return;
+    }
+
+    // From the environment until there's a settings window
+    std::string deepl_key;
+    if (api == Api::DeepL){
+        const char* key = std::getenv("DEEPL_API_KEY");
+        if (key == nullptr || *key == '\0'){
+            self->show_text("Set the DEEPL_API_KEY environment variable to use DeepL.");
+            return;
+        }
+        deepl_key = key;
     }
 
     self->show_text(std::format("Searching for {}...", keyword));
@@ -97,10 +111,11 @@ void MainWindow::on_search(Fl_Widget*, void* data){
     // The request can take seconds, and FLTK only redraws between
     // callbacks, so doing it here would freeze the window. The thread gets
     // copies of what it needs; it never touches a widget itself.
-    std::thread([self, id, keyword = std::move(keyword)]{
+    std::thread([self, id, api, keyword = std::move(keyword), deepl_key = std::move(deepl_key)]{
         auto* result = new SearchResult{.win = self, .id = id, .keyword = keyword};
         try {
-            result->entries = jisho_search(keyword);
+            if (api == Api::DeepL) result->translation = deepl_translate(keyword, deepl_key);
+            else result->entries = jisho_search(keyword);
         } catch (const std::exception& e){
             result->error = e.what();
         }
@@ -137,6 +152,8 @@ void MainWindow::show_result(const SearchResult& result){
 
     if (!result.error.empty())
         show_text(std::format("Search failed: {}", result.error));
+    else if (result.translation)
+        show_text(*result.translation);
     else if (result.entries.empty())
         show_text(std::format("No results for {}.", result.keyword));
     else
