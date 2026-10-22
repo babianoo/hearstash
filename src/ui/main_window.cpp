@@ -8,9 +8,13 @@
 
 // FLTK
 #include <FL/Fl.H>
+#include <FL/Fl_Button.H>
+#include <FL/Fl_SVG_Image.H>
 
 #include "core/deepl.h"
+#include "ui/icons.h"
 #include "ui/search_bar.h"
+#include "ui/theme.h"
 #include "ui/smooth_scroll.h"
 #include "ui/wrapped_text.h"
 
@@ -71,6 +75,23 @@ MainWindow::MainWindow(){
                                    results->content_w());
     results->end();
     results->hide();    // Shown by move_bar_to_top() on the first search
+
+    // Settings button in the top-right corner, as tall as the search bar so
+    // it lines up with it once the bar moves to the top. Not hooked up yet:
+    // there's no settings window.
+    Fl_Button* settings_btn = new Fl_Button(win.w() - MARGIN - 15, MARGIN, PILL_H, PILL_H);
+    // Same box as the Search button; on a square button it's a circle.
+    // Pressed it becomes FL_ROUND_DOWN_BOX, which has the same shape.
+    // (FL_ROUNDED_BOX's pressed look is a square, whose corners stay
+    // behind on release.)
+    settings_btn->box(FL_ROUND_UP_BOX);
+    // The button only borrows the image and never deletes it. It's needed
+    // for as long as the window exists, so it's simply never freed.
+    auto* gear = new Fl_SVG_Image(nullptr, ICON_SETTINGS);
+    gear->scale(18, 18);
+    settings_btn->image(gear);
+    settings_btn->tooltip("Settings");
+    settings_btn->clear_visible_focus();    // No dotted focus ring after a click
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
     win.end();

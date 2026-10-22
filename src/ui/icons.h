@@ -12,3 +12,16 @@ inline constexpr const char* ICON_MIC =
     "<path d='M3.5 7.5a4.5 4.5 0 0 0 9 0'/>"
     "<path d='M8 12v2.5M5.5 14.5h5'/>"
     "</svg>";
+
+// Gear: 8-tooth cog outline with a round hole
+inline constexpr const char* ICON_SETTINGS =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' "
+    "stroke='#444' stroke-width='1.2' stroke-linejoin='round'>"
+    "<path d='M12.97 6.46 L14.90 6.82 L14.90 9.18 L12.97 9.54 L12.60 10.43 "
+    "L13.72 12.04 L12.04 13.72 L10.43 12.60 L9.54 12.97 L9.18 14.90 L6.82 14.90 "
+    "L6.46 12.97 L5.57 12.60 L3.96 13.72 L2.28 12.04 L3.40 10.43 L3.03 9.54 "
+    "L1.10 9.18 L1.10 6.82 L3.03 6.46 L3.40 5.57 L2.28 3.96 L3.96 2.28 L5.57 3.40 "
+    "L6.46 3.03 L6.82 1.10 L9.18 1.10 L9.54 3.03 L10.43 3.40 L12.04 2.28 "
+    "L13.72 3.96 L12.60 5.57Z'/>"
+    "<circle cx='8' cy='8' r='2.2'/>"
+    "</svg>";
