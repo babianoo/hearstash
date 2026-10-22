@@ -80,7 +80,7 @@ MainWindow::MainWindow(){
     // Settings button in the top-right corner, as tall as the search bar so
     // it lines up with it once the bar moves to the top. Not hooked up yet:
     // there's no settings window.
-    Fl_Button* settings_btn = new Fl_Button(win.w() - MARGIN - 15, MARGIN, PILL_H, PILL_H);
+    Fl_Button* settings_btn = new Fl_Button(win.w() - MARGIN - 25, MARGIN, PILL_H, PILL_H);
     // Same box as the Search button; on a square button it's a circle.
     // Pressed it becomes FL_ROUND_DOWN_BOX, which has the same shape.
     // (FL_ROUNDED_BOX's pressed look is a square, whose corners stay
