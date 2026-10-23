@@ -17,6 +17,7 @@ class SearchBar;
 class SmoothScroll;
 class WrappedText;
 class Fl_Widget;
+struct TextSpan;
 
 class MainWindow {
 public:
@@ -62,7 +63,9 @@ private:
     static void on_search_done(void* data);
 
     void move_bar_to_top();
-    // Replaces what the results area shows, scrolled back to the top
+    // Replaces what the results area shows, scrolled back to the top.
+    // Plain text is in the default TextStyle.
     void show_text(std::string_view text);
+    void show_text(const std::vector<TextSpan>& spans);
     void show_result(const SearchResult& result);
 };

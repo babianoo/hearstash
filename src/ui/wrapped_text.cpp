@@ -18,22 +18,8 @@ static size_t char_len(std::string_view s, size_t i){
     return std::min<size_t>(std::max(1, fl_utf8len1(s[i])), s.size() - i);
 }
 
-// Bytes of s that fit in max_w pixels: up to the last space that fits, or
-// as many characters as fit if there's no such space. Always at least one
-// character, so even a very narrow widget makes progress.
-static size_t fit(std::string_view s, double max_w){
-    if (fl_width(s.data(), static_cast<int>(s.size())) <= max_w) return s.size();
-
-    size_t end = 0, last_space = 0;
-    while (end < s.size()){
-        const size_t next = end + char_len(s, end);
-        if (fl_width(s.data(), static_cast<int>(next)) > max_w) break;
-        if (s[end] == ' ') last_space = end;
-        end = next;
-    }
-
-    if (last_space > 0) return last_space;
-    return end > 0 ? end : char_len(s, 0);
+static void set_font(const TextStyle& style){
+    fl_font(style.font, style.size);
 }
 
 WrappedText::WrappedText(int x, int y, int w) : Fl_Widget(x, y, w, 2 * PAD){
@@ -43,8 +29,16 @@ WrappedText::WrappedText(int x, int y, int w) : Fl_Widget(x, y, w, 2 * PAD){
     selection_color(FL_SELECTION_COLOR);    // Same highlight as text fields
 }
 
-void WrappedText::text(std::string_view new_text){
-    full_text = new_text;
+void WrappedText::text(const std::vector<TextSpan>& spans){
+    full_text.clear();
+    runs.clear();
+    for (const TextSpan& span : spans){
+        if (span.text.empty()) continue;
+        full_text += span.text;
+        runs.push_back({full_text.size(), span.style});
+    }
+    if (runs.empty()) runs.push_back({0, {}});
+
     // Its offsets were into the old text
     sel_anchor = sel_cursor = 0;
     rewrap();
@@ -60,81 +54,141 @@ void WrappedText::resize(int x, int y, int w, int h){
 
 void WrappedText::rewrap(){
     lines.clear();
-    fl_font(labelfont(), labelsize());
     const int max_w = w() - 2 * PAD;
 
-    std::string_view rest_of_text = full_text;
+    size_t para_start = 0;
     while (true){
-        const size_t newline = rest_of_text.find('\n');
-        std::string_view paragraph = rest_of_text.substr(0, newline);
+        const size_t newline = full_text.find('\n', para_start);
+        const size_t para_end = newline == std::string::npos ? full_text.size() : newline;
 
-        const size_t start = paragraph.find_first_not_of(' ');
-        // Offset in full_text of where a view into it starts
-        auto offset = [&](std::string_view view){
-            return static_cast<size_t>(view.data() - full_text.data());
-        };
-
-        if (start == std::string_view::npos){
-            lines.push_back({{}, 0, offset(paragraph)});    // Empty line
+        const size_t start = full_text.find_first_not_of(' ', para_start);
+        if (start >= para_end){
+            lines.push_back({.start = para_start, .end = para_start});    // Empty line
         } else {
             // Leading spaces become an indent, so a wrap can't break there
-            int indent = static_cast<int>(fl_width(paragraph.data(), static_cast<int>(start)));
+            int indent = static_cast<int>(width(para_start, start));
 
             // Wrapped lines line up after the "1. " of a numbered line
             size_t hang_end = start;
-            while (hang_end < paragraph.size() && std::isdigit(static_cast<unsigned char>(paragraph[hang_end])))
+            while (hang_end < para_end && std::isdigit(static_cast<unsigned char>(full_text[hang_end])))
                 ++hang_end;
-            if (hang_end > start && paragraph.substr(hang_end, 2) == ". ") hang_end += 2;
+            if (hang_end > start && full_text.compare(hang_end, 2, ". ") == 0) hang_end += 2;
             else hang_end = start;
-            const int hang = static_cast<int>(fl_width(paragraph.data(), static_cast<int>(hang_end)));
+            const int hang = static_cast<int>(width(para_start, hang_end));
 
-            std::string_view rest = paragraph.substr(start);
-            while (!rest.empty()){
-                const size_t n = fit(rest, max_w - indent);
-                lines.push_back({std::string(rest.substr(0, n)), indent, offset(rest)});
-                rest.remove_prefix(n);
+            size_t pos = start;
+            while (pos < para_end){
+                const size_t end = fit(pos, para_end, max_w - indent);
+                lines.push_back({.start = pos, .end = end, .indent = indent});
+                pos = end;
                 // The space it broke at doesn't start the next line
-                while (!rest.empty() && rest.front() == ' ') rest.remove_prefix(1);
+                while (pos < para_end && full_text[pos] == ' ') ++pos;
                 indent = hang;
             }
         }
 
-        if (newline == std::string_view::npos) break;
-        rest_of_text.remove_prefix(newline + 1);
+        if (newline == std::string::npos) break;
+        para_start = newline + 1;
     }
 
     // No blank space under the last line
-    while (!lines.empty() && lines.back().text.empty()) lines.pop_back();
+    while (!lines.empty() && lines.back().start == lines.back().end) lines.pop_back();
+
+    int text_h = 0;
+    for (Line& line : lines){
+        measure(line);
+        line.y = text_h;
+        text_h += line.h;
+    }
 
     // Fl_Widget's resize, so this doesn't call itself
-    Fl_Widget::resize(x(), y(), w(), 2 * PAD + static_cast<int>(lines.size()) * fl_height());
+    Fl_Widget::resize(x(), y(), w(), 2 * PAD + text_h);
+}
+
+size_t WrappedText::run_at(size_t offset) const {
+    const auto it = std::upper_bound(runs.begin(), runs.end(), offset,
+                                     [](size_t o, const Run& run){ return o < run.end; });
+    return it == runs.end() ? runs.size() - 1 : static_cast<size_t>(it - runs.begin());
+}
+
+double WrappedText::width(size_t from, size_t to) const {
+    double total = 0;
+    for (size_t r = run_at(from); from < to; ++r){
+        const size_t piece_end = std::min(to, runs[r].end);
+        set_font(runs[r].style);
+        total += fl_width(full_text.data() + from, static_cast<int>(piece_end - from));
+        from = piece_end;
+    }
+    return total;
+}
+
+// Up to the last space that fits, or as many characters as fit if there's
+// no such space. Always at least one character, so even a very narrow
+// widget makes progress.
+size_t WrappedText::fit(size_t from, size_t to, double max_w) const {
+    if (width(from, to) <= max_w) return to;
+
+    // Measures from where the current run starts, plus the finished runs
+    // before it, instead of from `from` each time, which would cost a
+    // font switch per run per character
+    size_t end = from, last_space = from;
+    size_t r = run_at(from), run_start = from;
+    double runs_before_w = 0;
+    set_font(runs[r].style);
+    while (end < to){
+        while (end >= runs[r].end && r + 1 < runs.size()){
+            runs_before_w += fl_width(full_text.data() + run_start, static_cast<int>(end - run_start));
+            run_start = end;
+            set_font(runs[++r].style);
+        }
+        const size_t next = end + char_len(full_text, end);
+        if (runs_before_w + fl_width(full_text.data() + run_start, static_cast<int>(next - run_start)) > max_w)
+            break;
+        if (full_text[end] == ' ') last_space = end;
+        end = next;
+    }
+
+    if (last_space > from) return last_space;
+    return end > from ? end : from + char_len(full_text, from);
+}
+
+void WrappedText::measure(Line& line) const {
+    int ascent = 0, descent = 0;
+    // An empty line is as tall as the text it would have
+    const size_t last = line.end > line.start ? run_at(line.end - 1) : run_at(line.start);
+    for (size_t r = run_at(line.start); r <= last; ++r){
+        set_font(runs[r].style);
+        ascent = std::max(ascent, fl_height() - fl_descent());
+        descent = std::max(descent, fl_descent());
+    }
+    line.h = ascent + descent;
+    line.baseline = ascent;
 }
 
 size_t WrappedText::offset_at(int mouse_x, int mouse_y){
     if (lines.empty()) return 0;
 
-    fl_font(labelfont(), labelsize());
-    const int line_h = fl_height();
-
     // Above the text is its start, below it is its end
-    if (mouse_y < y() + PAD) return lines.front().start;
-    const size_t i = static_cast<size_t>((mouse_y - y() - PAD) / line_h);
-    if (i >= lines.size()) return lines.back().start + lines.back().text.size();
+    const int text_y = mouse_y - (y() + PAD);
+    if (text_y < 0) return lines.front().start;
+    const auto it = std::find_if(lines.begin(), lines.end(),
+                                 [&](const Line& line){ return text_y < line.y + line.h; });
+    if (it == lines.end()) return lines.back().end;
 
     // The first character whose middle is right of the mouse. Left of the
     // text is the line's start, right of it the line's end.
-    const Line& line = lines[i];
+    const Line& line = *it;
     const double mouse = mouse_x - (x() + PAD + line.indent);
-    size_t end = 0;
+    size_t end = line.start;
     double left = 0;
-    while (end < line.text.size()){
-        const size_t next = end + char_len(line.text, end);
-        const double right = fl_width(line.text.data(), static_cast<int>(next));
+    while (end < line.end){
+        const size_t next = end + char_len(full_text, end);
+        const double right = width(line.start, next);
         if (mouse < (left + right) / 2) break;
         end = next;
         left = right;
     }
-    return line.start + end;
+    return end;
 }
 
 void WrappedText::copy_selection(int destination) const {
@@ -192,46 +246,59 @@ int WrappedText::handle(int event){
     return Fl_Widget::handle(event);
 }
 
+void WrappedText::draw_line(const Line& line, int x, int baseline, bool on_selection) const {
+    double piece_x = x;
+    size_t from = line.start;
+    for (size_t r = run_at(from); from < line.end; ++r){
+        const size_t piece_end = std::min(line.end, runs[r].end);
+        const char* piece = full_text.data() + from;
+        const int len = static_cast<int>(piece_end - from);
+
+        Fl_Color color = runs[r].style.color;
+        if (!active_r()) color = fl_inactive(color);
+        // Readable on the highlight, e.g. white on dark blue
+        if (on_selection) color = fl_contrast(color, selection_color());
+        set_font(runs[r].style);
+        fl_color(color);
+        // This fl_draw() draws the text as is: no '@' symbols, no '&' underlines
+        fl_draw(piece, len, static_cast<int>(piece_x), baseline);
+
+        piece_x += fl_width(piece, len);
+        from = piece_end;
+    }
+}
+
 void WrappedText::draw(){
     draw_box();
 
-    fl_font(labelfont(), labelsize());
-    const Fl_Color text_color = active_r() ? labelcolor() : fl_inactive(labelcolor());
-    // Readable on the highlight, e.g. white on dark blue
-    const Fl_Color selected_color = fl_contrast(text_color, selection_color());
-    const int line_h = fl_height();
     const size_t sel_lo = std::min(sel_anchor, sel_cursor), sel_hi = std::max(sel_anchor, sel_cursor);
 
-    for (size_t i = 0; i < lines.size(); ++i){
-        const int line_y = y() + PAD + static_cast<int>(i) * line_h;
+    for (const Line& line : lines){
+        const int line_y = y() + PAD + line.y;
         // Most lines are scrolled out of view; skip those
-        if (!fl_not_clipped(x(), line_y, w(), line_h)) continue;
+        if (!fl_not_clipped(x(), line_y, w(), line.h)) continue;
 
-        // This fl_draw() draws the text as is: no '@' symbols, no '&' underlines
-        const Line& line = lines[i];
-        const char* text = line.text.data();
-        const int len = static_cast<int>(line.text.size());
-        const int text_x = x() + PAD + line.indent, baseline = line_y + line_h - fl_descent();
-        fl_color(text_color);
-        fl_draw(text, len, text_x, baseline);
+        const int text_x = x() + PAD + line.indent, baseline = line_y + line.baseline;
+        draw_line(line, text_x, baseline, false);
 
         // The selected part of this line, if any
-        const size_t line_end = line.start + line.text.size();
-        if (sel_lo == sel_hi || sel_lo > line_end || sel_hi <= line.start) continue;
-        const int from = static_cast<int>(std::max(sel_lo, line.start) - line.start);
-        const int to = static_cast<int>(std::min(sel_hi, line_end) - line.start);
-        const int sel_x = text_x + static_cast<int>(fl_width(text, from));
-        int sel_w = static_cast<int>(fl_width(text, to)) - static_cast<int>(fl_width(text, from));
+        if (sel_lo == sel_hi || sel_lo > line.end || sel_hi <= line.start) continue;
+        const size_t from = std::max(sel_lo, line.start), to = std::min(sel_hi, line.end);
+        const int from_x = static_cast<int>(width(line.start, from));
+        const int sel_x = text_x + from_x;
+        int sel_w = static_cast<int>(width(line.start, to)) - from_x;
         // A space's worth more when the selection goes on to the next line,
         // so a selected empty line shows up too
-        if (sel_hi > line_end) sel_w += static_cast<int>(fl_width(' '));
+        if (sel_hi > line.end){
+            set_font(runs[run_at(line.end)].style);
+            sel_w += static_cast<int>(fl_width(' '));
+        }
 
         // Highlight, then the text again on top of it, but only inside it
         fl_color(selection_color());
-        fl_rectf(sel_x, line_y, sel_w, line_h);
-        fl_push_clip(sel_x, line_y, sel_w, line_h);
-        fl_color(selected_color);
-        fl_draw(text, len, text_x, baseline);
+        fl_rectf(sel_x, line_y, sel_w, line.h);
+        fl_push_clip(sel_x, line_y, sel_w, line.h);
+        draw_line(line, text_x, baseline, true);
         fl_pop_clip();
     }
 }
