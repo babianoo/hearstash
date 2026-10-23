@@ -1,20 +1,113 @@
 #include "ui/search_bar.h"
 
+#include <algorithm>
+#include <cctype>
 #include <iterator>
+#include <string_view>
 
 // FLTK
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Input.H>
 #include <FL/Fl_Button.H>
+#include <FL/fl_draw.H>
 #include <FL/Fl_Menu_Item.H>
 #include <FL/Fl_Multi_Label.H>
 #include <FL/Fl_SVG_Image.H>
 
+#include "ui/clipboard.h"
 #include "ui/icons.h"
 #include "ui/theme.h"
 
 // Indexed by Api
 static constexpr const char* API_NAMES[] = {"Jisho", "DeepL", "MyMemory"};
+
+// Fl_Input whose copy, cut and paste go through ui/clipboard.h instead of
+// FLTK's own clipboard, which loses what's copied on Wayland. Same keys
+// and right-click menu as Fl_Input, whose versions can't be overridden.
+class ClipboardInput : public Fl_Input {
+public:
+    using Fl_Input::Fl_Input;
+
+    int handle(int event) override {
+        if (event == FL_KEYBOARD){
+            // Same combinations as Fl_Input
+            const int mods = Fl::event_state() & (FL_META | FL_CTRL | FL_ALT);
+            const bool shift = Fl::event_state(FL_SHIFT);
+            const int key = Fl::event_key();
+            if ((key == 'c' && mods == FL_COMMAND) || (key == FL_Insert && mods == FL_CTRL)){
+                copy_selection();
+                return 1;
+            }
+            if (key == 'x' && mods == FL_COMMAND){
+                copy_selection();
+                cut();
+                return 1;
+            }
+            if ((key == 'v' && mods == FL_COMMAND) || (key == FL_Insert && mods == 0 && shift)){
+                clipboard_paste(*this);
+                return 1;
+            }
+        }
+
+        if (event == FL_PUSH && Fl::event_button() == FL_RIGHT_MOUSE){
+            if (Fl::focus() != this){
+                Fl::focus(this);
+                handle(FL_FOCUS);
+            }
+            show_menu();
+            return 1;
+        }
+
+        return Fl_Input::handle(event);
+    }
+
+private:
+    void copy_selection(){
+        const int from = std::min(insert_position(), mark()), to = std::max(insert_position(), mark());
+        if (from != to) clipboard_copy(std::string_view(value() + from, to - from));
+    }
+
+    // Like Fl_Input's: a click outside the selection first selects the
+    // word (or run of spaces) under the mouse, or moves the cursor to the
+    // end when it's past the text
+    void show_menu(){
+        const int old_pos = insert_position(), old_mark = mark();
+        const Fl_Boxtype b = box();
+        Fl_Input_::handle_mouse(x() + Fl::box_dx(b), y() + Fl::box_dy(b), w() - Fl::box_dw(b), h() - Fl::box_dh(b), 0);
+        const int pos = insert_position();
+
+        auto is_space = [](unsigned c){ return c < 128 && std::isspace(static_cast<int>(c)); };
+        if ((old_pos < pos && pos < old_mark) || (old_mark < pos && pos < old_pos)){
+            insert_position(old_pos, old_mark);    // Inside the selection: keep it
+        } else if (index(pos) == 0){
+            insert_position(pos, pos);
+        } else if (is_space(index(pos))){
+            int from = pos, to = pos + 1;
+            while (from > 0 && is_space(index(from - 1))) --from;
+            while (to < size() && is_space(index(to))) ++to;
+            insert_position(from, to);
+        } else {
+            insert_position(word_start(pos), word_end(pos));
+        }
+
+        // The labels are read here, since an app may change them. The last
+        // item stays empty: it ends the menu.
+        Fl_Menu_Item menu[4]{};
+        menu[0].label(Fl_Input::cut_menu_text);
+        menu[1].label(Fl_Input::copy_menu_text);
+        menu[2].label(Fl_Input::paste_menu_text);
+        fl_cursor(FL_CURSOR_DEFAULT);
+        const Fl_Menu_Item* chosen = menu->popup(Fl::event_x(), Fl::event_y());
+        if (chosen == &menu[0]){
+            copy_selection();
+            cut();
+        } else if (chosen == &menu[1]){
+            copy_selection();
+        } else if (chosen == &menu[2]){
+            clipboard_paste(*this);
+        }
+    }
+};
 
 SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
     // Fl_Group's constructor calls begin(), so widgets created below are
@@ -44,7 +137,7 @@ SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
     // keyboard focus when the window opens.
     const int btn_x = x + w - btn_w - pad;
     const int input_x = divider_x + 1 + 6;
-    input = new Fl_Input(input_x, y + 2, btn_x - 6 - input_x, h - 4);
+    input = new ClipboardInput(input_x, y + 2, btn_x - 6 - input_x, h - 4);
     input->box(FL_FLAT_BOX);
     input->when(FL_WHEN_ENTER_KEY_ALWAYS);    // Enter searches, even unchanged
     input->callback(on_submit, this);

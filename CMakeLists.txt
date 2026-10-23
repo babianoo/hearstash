@@ -22,6 +22,9 @@ find_package(nlohmann_json 3.11 REQUIRED)
 # System FLTK may be built with cairo support, so its public header needs
 # cairo.h even though we don't use cairo directly.
 pkg_check_modules(CAIRO QUIET cairo)
+# For src/ui/clipboard.cpp, which works around FLTK's Wayland clipboard.
+# Without it (an X11-only system) the app uses FLTK's clipboard as is.
+pkg_check_modules(WAYLAND_CLIENT QUIET IMPORTED_TARGET wayland-client)
 
 # Add new source files here, by path from the project root.
 add_executable(prototype
@@ -29,6 +32,7 @@ add_executable(prototype
     src/core/http.cpp
     src/core/deepl.cpp
     src/core/jisho.cpp
+    src/ui/clipboard.cpp
     src/ui/main_window.cpp
     src/ui/search_bar.cpp
     src/ui/smooth_scroll.cpp
@@ -47,3 +51,7 @@ target_link_libraries(prototype PRIVATE
     CURL::libcurl
     nlohmann_json::nlohmann_json
 )
+if(WAYLAND_CLIENT_FOUND)
+    target_link_libraries(prototype PRIVATE PkgConfig::WAYLAND_CLIENT)
+    target_compile_definitions(prototype PRIVATE HAVE_WAYLAND_CLIENT)
+endif()

@@ -9,6 +9,8 @@
 #include <FL/fl_draw.H>
 #include <FL/fl_utf8.h>
 
+#include "ui/clipboard.h"
+
 // Space between the text and the widget's edges
 static constexpr int PAD = 6;
 
@@ -195,7 +197,9 @@ void WrappedText::copy_selection(int destination) const {
     const size_t sel_lo = std::min(sel_anchor, sel_cursor), sel_hi = std::max(sel_anchor, sel_cursor);
     if (sel_lo == sel_hi) return;
     // Straight from full_text, so wrapped lines come out as the one line they are
-    Fl::copy(full_text.data() + sel_lo, static_cast<int>(sel_hi - sel_lo), destination);
+    const std::string_view selected = std::string_view(full_text).substr(sel_lo, sel_hi - sel_lo);
+    if (destination == 1) clipboard_copy(selected);
+    else Fl::copy(selected.data(), static_cast<int>(selected.size()), 0);
 }
 
 int WrappedText::handle(int event){

@@ -13,6 +13,7 @@
 #include <FL/Fl_SVG_Image.H>
 
 #include "core/deepl.h"
+#include "ui/clipboard.h"
 #include "ui/icons.h"
 #include "ui/search_bar.h"
 #include "ui/theme.h"
@@ -133,6 +134,7 @@ MainWindow::MainWindow(){
 
 void MainWindow::show(int argc, char** argv){
     win.show(argc, argv);
+    clipboard_init();    // Needs the display, which show() opens
 }
 
 void MainWindow::on_search(Fl_Widget*, void* data){
