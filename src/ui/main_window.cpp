@@ -70,10 +70,15 @@ MainWindow::MainWindow(){
     // Fills the space under the bar, same width
     const int results_y = bar_y + search_bar->h() + MARGIN;
     results = new SmoothScroll(bar_x, results_y, bar_w, win.h() - results_y - MARGIN);
+    // Blends into the window: no border, window's color. Still a flat box,
+    // not FL_NO_BOX, since it has to repaint what scrolling uncovers.
+    results->box(FL_FLAT_BOX);
+    results->color(FL_BACKGROUND_COLOR);
     // Inside the box's border, and stops before the scrollbar
     results_text = new WrappedText(bar_x + Fl::box_dx(results->box()),
                                    results_y + Fl::box_dy(results->box()),
                                    results->content_w());
+    results_text->color(FL_BACKGROUND_COLOR);
     results->end();
     results->hide();    // Shown by move_bar_to_top() on the first search
 
