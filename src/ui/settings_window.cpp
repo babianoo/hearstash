@@ -2,15 +2,23 @@
 
 #include <algorithm>
 #include <iterator>
+#include <string_view>
 
 // FLTK
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Button.H>
 #include <FL/Fl_Group.H>
 #include <FL/fl_draw.H>
+#include <FL/Fl_SVG_Image.H>
+
+#include "ui/clipboard_input.h"
+#include "ui/icons.h"
+#include "ui/theme.h"
 
 // Same categories as japanese-helper, in sidebar order
 static constexpr const char* CATEGORY_NAMES[] = {"General", "History", "API", "Speech-to-Text"};
+// Indexes into CATEGORY_NAMES
+enum Category : size_t { GENERAL, HISTORY, API, SPEECH_TO_TEXT };
 
 static constexpr int SIDEBAR_W = 160;
 static constexpr int CATEGORY_H = 36;
@@ -46,7 +54,7 @@ public:
     }
 };
 
-SettingsWindow::SettingsWindow(){
+SettingsWindow::SettingsWindow(Settings& settings) : settings(settings){
     // win is the current group here, like in MainWindow
 
     // A bit darker than the pages, so it stands apart from them. Computed
@@ -67,14 +75,9 @@ SettingsWindow::SettingsWindow(){
     sidebar->end();
 
     const int page_x = SIDEBAR_W, page_w = win.w() - SIDEBAR_W;
-    for (const char* name : CATEGORY_NAMES){
+    for (size_t i = 0; i < std::size(CATEGORY_NAMES); ++i){
         Fl_Group* page = new Fl_Group(page_x, 0, page_w, win.h());
-
-        // Placeholder until the page has settings: shows which page it is
-        Fl_Box* heading = new Fl_Box(page_x + MARGIN, MARGIN, page_w - 2 * MARGIN, CATEGORY_H, name);
-        heading->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-        heading->labelfont(FL_HELVETICA_BOLD);
-        heading->labelsize(18);
+        if (i == API) add_api_settings(page_x, page_w);
 
         page->end();
         page->hide();    // Shown by select()
@@ -85,6 +88,39 @@ SettingsWindow::SettingsWindow(){
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
     win.end();
+}
+
+// DeepL key: a label, then the input with an eye button on its right,
+// then a note that the key isn't saved
+void SettingsWindow::add_api_settings(int x, int w){
+    const int left = x + MARGIN, right = x + w - MARGIN;
+    // Lines up with the first category in the sidebar
+    int y = MARGIN + (CATEGORY_H - 20) / 2;
+
+    Fl_Box* label = new Fl_Box(left, y, right - left, 20, "DeepL API key");
+    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    y += label->h() + 4;
+
+    // Same height as the search bar; the button is square, like the gear
+    const int btn_x = right - PILL_H;
+    key_input = new ClipboardInput(left, y, btn_x - 6 - left, PILL_H);
+    key_input->value(settings.deepl_key.c_str());
+    // On every keystroke, so the key is in use as soon as it's typed
+    key_input->when(FL_WHEN_CHANGED);
+    key_input->callback(on_key_changed, this);
+
+    key_visibility_btn = new Fl_Button(btn_x, y, PILL_H, PILL_H);
+    key_visibility_btn->box(FL_ROUND_UP_BOX);    // Round, like the gear
+    key_visibility_btn->clear_visible_focus();   // No dotted focus ring after a click
+    key_visibility_btn->callback(on_key_visibility, this);
+    set_key_hidden(true);
+    y += PILL_H + 6;
+
+    Fl_Box* note = new Fl_Box(left, y, right - left, 20,
+                              "Only kept until the app closes.");
+    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    note->labelsize(12);
+    note->labelcolor(DIM);
 }
 
 void SettingsWindow::show(){
@@ -105,4 +141,46 @@ void SettingsWindow::select(size_t i){
         if (p == i) pages[p]->show();
         else pages[p]->hide();
     }
+}
+
+void SettingsWindow::on_key_changed(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+
+    // Without the spaces or line break a pasted key may come with, which
+    // DeepL would reject
+    std::string_view key = self->key_input->value();
+    const size_t first = key.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos){
+        self->settings.deepl_key.clear();
+        return;
+    }
+    const size_t last = key.find_last_not_of(" \t\r\n");
+    self->settings.deepl_key = key.substr(first, last - first + 1);
+}
+
+void SettingsWindow::on_key_visibility(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    self->set_key_hidden(self->key_input->input_type() != FL_SECRET_INPUT);
+}
+
+void SettingsWindow::set_key_hidden(bool hidden){
+    // Made once and kept for the whole program; the button only borrows
+    // them.
+    static Fl_SVG_Image* show_icon = []{
+        auto* icon = new Fl_SVG_Image(nullptr, ICON_SHOW);
+        icon->scale(18, 18);
+        return icon;
+    }();
+    static Fl_SVG_Image* hide_icon = []{
+        auto* icon = new Fl_SVG_Image(nullptr, ICON_HIDE);
+        icon->scale(18, 18);
+        return icon;
+    }();
+
+    key_input->type(hidden ? FL_SECRET_INPUT : FL_NORMAL_INPUT);
+    key_input->redraw();
+    // The icon shows what clicking does
+    key_visibility_btn->image(hidden ? show_icon : hide_icon);
+    key_visibility_btn->tooltip(hidden ? "Show key" : "Hide key");
+    key_visibility_btn->redraw();
 }

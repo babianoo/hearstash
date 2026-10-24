@@ -196,7 +196,7 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 
 void MainWindow::on_settings(Fl_Widget*, void* data){
     MainWindow* self = static_cast<MainWindow*>(data);
-    if (!self->settings_win) self->settings_win = std::make_unique<SettingsWindow>();
+    if (!self->settings_win) self->settings_win = std::make_unique<SettingsWindow>(self->settings);
     self->settings_win->show();
 }
 
