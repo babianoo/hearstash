@@ -1,0 +1,74 @@
+#include "core/settings.h"
+
+#include <format>
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <system_error>
+
+// JSON
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
+namespace fs = std::filesystem;
+
+// Written into the file. Bump it when a field is renamed or changes
+// meaning, so load_settings can tell an older file apart and convert it.
+static constexpr int VERSION = 1;
+
+// to_json and from_json for each struct, which json(settings) and
+// get<Settings>() use. A field is only saved if it's listed here.
+// _WITH_DEFAULT: a key the file doesn't have keeps the field's default
+// instead of throwing.
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, api)
+
+Settings load_settings(const fs::path& file){
+    std::ifstream in(file);
+    if (!in) return {};
+
+    try {
+        // Keys it doesn't know, like "version", are ignored
+        Settings settings = json::parse(in).get<Settings>();
+        sanitize(settings);
+        return settings;
+    } catch (const json::exception& e){
+        // Not JSON, or a value of the wrong type, which fails the whole
+        // file. Closed first: Windows can't rename an open file.
+        in.close();
+        fs::path bad = file;
+        bad += ".bad";
+        // Not worth failing over: the defaults are used either way
+        std::error_code ec;
+        fs::rename(file, bad, ec);
+        std::cerr << std::format("Couldn't read {}, so the settings start from the defaults: {}\n",
+                                 file.string(), e.what());
+        if (!ec) std::cerr << std::format("It was renamed to {}.\n", bad.string());
+        return {};
+    }
+}
+
+void save_settings(const fs::path& file, const Settings& settings){
+    json j = settings;
+    j["version"] = VERSION;
+
+    fs::create_directories(file.parent_path());
+
+    // Written next to it, then moved over it in one step. A crash while
+    // writing leaves the old file as it was, not half of the new one.
+    fs::path tmp = file;
+    tmp += ".tmp";
+    std::ofstream out(tmp);
+    out << j.dump(4) << '\n';
+    out.close();
+    if (!out) throw std::runtime_error(std::format("Couldn't write {}", tmp.string()));
+    fs::rename(tmp, file);
+}
+
+void sanitize(Settings& settings){
+    // DeepL rejects a key with the spaces or line break it may be pasted
+    // with
+    std::string& key = settings.api.deepl_key;
+    key.erase(key.find_last_not_of(" \t\r\n") + 1);
+    key.erase(0, key.find_first_not_of(" \t\r\n"));
+}

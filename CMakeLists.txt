@@ -33,6 +33,7 @@ add_executable(prototype
     src/core/deepl.cpp
     src/core/jisho.cpp
     src/core/config_dir.cpp
+    src/core/settings.cpp
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
     src/ui/main_window.cpp

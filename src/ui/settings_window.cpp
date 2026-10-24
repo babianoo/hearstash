@@ -104,7 +104,7 @@ void SettingsWindow::add_api_settings(int x, int w){
     // Same height as the search bar; the button is square, like the gear
     const int btn_x = right - PILL_H;
     key_input = new ClipboardInput(left, y, btn_x - 6 - left, PILL_H);
-    key_input->value(settings.deepl_key.c_str());
+    key_input->value(settings.api.deepl_key.c_str());
     // On every keystroke, so the key is in use as soon as it's typed
     key_input->when(FL_WHEN_CHANGED);
     key_input->callback(on_key_changed, this);
@@ -151,11 +151,11 @@ void SettingsWindow::on_key_changed(Fl_Widget*, void* data){
     std::string_view key = self->key_input->value();
     const size_t first = key.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos){
-        self->settings.deepl_key.clear();
+        self->settings.api.deepl_key.clear();
         return;
     }
     const size_t last = key.find_last_not_of(" \t\r\n");
-    self->settings.deepl_key = key.substr(first, last - first + 1);
+    self->settings.api.deepl_key = key.substr(first, last - first + 1);
 }
 
 void SettingsWindow::on_key_visibility(Fl_Widget*, void* data){

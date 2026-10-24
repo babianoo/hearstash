@@ -89,7 +89,7 @@ static std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entri
 
 MainWindow::MainWindow(){
     // The environment's key, if any, is where the settings start from
-    if (const char* key = std::getenv("DEEPL_API_KEY")) settings.deepl_key = key;
+    if (const char* key = std::getenv("DEEPL_API_KEY")) settings.api.deepl_key = key;
 
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
@@ -156,14 +156,14 @@ void MainWindow::on_search(Fl_Widget*, void* data){
     // change while it runs.
     std::string deepl_key;
     if (api == Api::DeepL){
-        if (self->settings.deepl_key.empty()){
+        if (self->settings.api.deepl_key.empty()){
             // Modal: waits for OK before returning
             fl_alert("No DeepL API key found.\n\n"
                      "Input the DeepL key in the settings or "
                      "set the DEEPL_API_KEY environment variable to use DeepL.");
             return;
         }
-        deepl_key = self->settings.deepl_key;
+        deepl_key = self->settings.api.deepl_key;
     }
 
     self->move_bar_to_top();
