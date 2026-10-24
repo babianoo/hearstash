@@ -25,3 +25,22 @@ inline constexpr const char* ICON_SETTINGS =
     "L13.72 3.96 L12.60 5.57Z'/>"
     "<circle cx='8' cy='8' r='2.2'/>"
     "</svg>";
+
+// Eye: almond outline with a round pupil. Shown while the text is hidden;
+// clicking it shows the text.
+inline constexpr const char* ICON_SHOW =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' "
+    "stroke='#444' stroke-width='1.2' stroke-linejoin='round'>"
+    "<path d='M1.5 8C3 5 5.3 3.5 8 3.5S13 5 14.5 8C13 11 10.7 12.5 8 12.5S3 11 1.5 8Z'/>"
+    "<circle cx='8' cy='8' r='2.2'/>"
+    "</svg>";
+
+// The same eye, struck through. Shown while the text is visible; clicking
+// it hides the text again.
+inline constexpr const char* ICON_HIDE =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' "
+    "stroke='#444' stroke-width='1.2' stroke-linejoin='round' stroke-linecap='round'>"
+    "<path d='M1.5 8C3 5 5.3 3.5 8 3.5S13 5 14.5 8C13 11 10.7 12.5 8 12.5S3 11 1.5 8Z'/>"
+    "<circle cx='8' cy='8' r='2.2'/>"
+    "<path d='M2.5 2.5l11 11'/>"
+    "</svg>";
