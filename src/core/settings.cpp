@@ -1,5 +1,6 @@
 #include "core/settings.h"
 
+#include <cstdlib>
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -71,4 +72,10 @@ void sanitize(Settings& settings){
     std::string& key = settings.api.deepl_key;
     key.erase(key.find_last_not_of(" \t\r\n") + 1);
     key.erase(0, key.find_first_not_of(" \t\r\n"));
+}
+
+std::string effective_deepl_key(const Settings& settings){
+    if (!settings.api.deepl_key.empty()) return settings.api.deepl_key;
+    const char* key = std::getenv("DEEPL_API_KEY");
+    return key ? key : "";
 }

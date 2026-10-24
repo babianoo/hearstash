@@ -10,11 +10,11 @@
 #include <FL/Fl_Double_Window.H>
 
 #include "core/jisho.h"
-#include "core/settings.h"
 
-// Only pointers to these are stored here, so the full headers are
-// included in main_window.cpp instead.
+// Only pointers and references to these are stored here, so the full
+// headers are included in main_window.cpp instead.
 class SearchBar;
+class SettingsStore;
 class SettingsWindow;
 class SmoothScroll;
 class WrappedText;
@@ -23,7 +23,8 @@ struct TextSpan;
 
 class MainWindow {
 public:
-    MainWindow();
+    // settings has to outlive the window
+    explicit MainWindow(SettingsStore& settings);
     // Defined in main_window.cpp, where SettingsWindow is a complete type,
     // which unique_ptr needs to delete it
     ~MainWindow();
@@ -57,8 +58,8 @@ private:
     SmoothScroll* results = nullptr;
     WrappedText* results_text = nullptr;
 
-    // Filled in by settings_win, read when searching
-    Settings settings;
+    // Changed by settings_win, read when searching
+    SettingsStore& settings;
     // Created on the first click of the settings button. Not a plain
     // member: constructing a window makes it the current group, so while
     // win's widgets are being created it would take them in instead of win.

@@ -37,3 +37,8 @@ void save_settings(const std::filesystem::path& file, const Settings& settings);
 // a pasted key may come with. load_settings calls it, and so should
 // whatever changes the settings.
 void sanitize(Settings& settings);
+
+// The DeepL key to search with: the saved one, or if there's none, the
+// DEEPL_API_KEY environment variable, which is never saved. Empty when
+// neither is set.
+std::string effective_deepl_key(const Settings& settings);

@@ -1,9 +1,11 @@
 // FLTK
 #include <FL/Fl.H>
 
+#include "core/config_dir.h"
 #include "core/http.h"
 #include "ui/theme.h"
 #include "ui/main_window.h"
+#include "ui/settings_store.h"
 
 int main(int argc, char** argv){
     // Before any thread exists: searches run on their own threads
@@ -13,7 +15,12 @@ int main(int argc, char** argv){
 
     init_theme();
 
-    MainWindow main_win;
+    // Declared before main_win, which uses it, so it's destroyed after it.
+    // That's once Fl::run() returns, and it then saves a change still
+    // waiting to be saved.
+    SettingsStore settings(config_dir() / "settings.json");
+
+    MainWindow main_win(settings);
     main_win.show(argc, argv);
 
     return Fl::run();

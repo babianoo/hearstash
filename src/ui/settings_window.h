@@ -5,11 +5,10 @@
 // FLTK
 #include <FL/Fl_Double_Window.H>
 
-#include "core/settings.h"
-
-// Only pointers to these are stored here, so the full headers are
-// included in settings_window.cpp instead.
+// Only pointers and references to these are stored here, so the full
+// headers are included in settings_window.cpp instead.
 class ClipboardInput;
+class SettingsStore;
 class Fl_Button;
 class Fl_Group;
 class Fl_Widget;
@@ -18,12 +17,12 @@ class Fl_Widget;
 // and on the right the page of the selected one. Only the API page has
 // settings so far (the DeepL key); the others are empty.
 //
-// Changes go straight into the Settings it was given, as they're made:
-// there's no Apply button.
+// Changes go into the SettingsStore it was given as they're made, which
+// saves them: there's no Apply button.
 class SettingsWindow {
 public:
     // settings has to outlive the window
-    explicit SettingsWindow(Settings& settings);
+    explicit SettingsWindow(SettingsStore& settings);
 
     // One settings window per app: copying makes no sense
     SettingsWindow(const SettingsWindow&) = delete;
@@ -34,7 +33,7 @@ public:
     void show();
 
 private:
-    Settings& settings;
+    SettingsStore& settings;
 
     // Owned by SettingsWindow as a member, so no new/delete anywhere.
     // Closing the window only hides it, so its settings stay as they were.

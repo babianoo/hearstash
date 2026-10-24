@@ -1,6 +1,5 @@
 #include "ui/main_window.h"
 
-#include <cstdlib>
 #include <format>
 #include <stdexcept>
 #include <string_view>
@@ -13,9 +12,11 @@
 #include <FL/Fl_SVG_Image.H>
 
 #include "core/deepl.h"
+#include "core/settings.h"
 #include "ui/clipboard.h"
 #include "ui/icons.h"
 #include "ui/search_bar.h"
+#include "ui/settings_store.h"
 #include "ui/settings_window.h"
 #include "ui/theme.h"
 #include "ui/smooth_scroll.h"
@@ -87,10 +88,7 @@ static std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entri
     return spans;
 }
 
-MainWindow::MainWindow(){
-    // The environment's key, if any, is where the settings start from
-    if (const char* key = std::getenv("DEEPL_API_KEY")) settings.api.deepl_key = key;
-
+MainWindow::MainWindow(SettingsStore& settings) : settings(settings){
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
 
@@ -156,14 +154,14 @@ void MainWindow::on_search(Fl_Widget*, void* data){
     // change while it runs.
     std::string deepl_key;
     if (api == Api::DeepL){
-        if (self->settings.api.deepl_key.empty()){
+        deepl_key = effective_deepl_key(self->settings.get());
+        if (deepl_key.empty()){
             // Modal: waits for OK before returning
             fl_alert("No DeepL API key found.\n\n"
                      "Input the DeepL key in the settings or "
                      "set the DEEPL_API_KEY environment variable to use DeepL.");
             return;
         }
-        deepl_key = self->settings.api.deepl_key;
     }
 
     self->move_bar_to_top();

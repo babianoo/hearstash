@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <iterator>
-#include <string_view>
 
 // FLTK
 #include <FL/Fl_Box.H>
@@ -13,6 +12,7 @@
 
 #include "ui/clipboard_input.h"
 #include "ui/icons.h"
+#include "ui/settings_store.h"
 #include "ui/theme.h"
 
 // Same categories as japanese-helper, in sidebar order
@@ -54,7 +54,7 @@ public:
     }
 };
 
-SettingsWindow::SettingsWindow(Settings& settings) : settings(settings){
+SettingsWindow::SettingsWindow(SettingsStore& settings) : settings(settings){
     // win is the current group here, like in MainWindow
 
     // A bit darker than the pages, so it stands apart from them. Computed
@@ -91,7 +91,7 @@ SettingsWindow::SettingsWindow(Settings& settings) : settings(settings){
 }
 
 // DeepL key: a label, then the input with an eye button on its right,
-// then a note that the key isn't saved
+// then a note on what an empty one means
 void SettingsWindow::add_api_settings(int x, int w){
     const int left = x + MARGIN, right = x + w - MARGIN;
     // Lines up with the first category in the sidebar
@@ -104,7 +104,7 @@ void SettingsWindow::add_api_settings(int x, int w){
     // Same height as the search bar; the button is square, like the gear
     const int btn_x = right - PILL_H;
     key_input = new ClipboardInput(left, y, btn_x - 6 - left, PILL_H);
-    key_input->value(settings.api.deepl_key.c_str());
+    key_input->value(settings.get().api.deepl_key.c_str());
     // On every keystroke, so the key is in use as soon as it's typed
     key_input->when(FL_WHEN_CHANGED);
     key_input->callback(on_key_changed, this);
@@ -117,7 +117,7 @@ void SettingsWindow::add_api_settings(int x, int w){
     y += PILL_H + 6;
 
     Fl_Box* note = new Fl_Box(left, y, right - left, 20,
-                              "Only kept until the app closes.");
+                              "If empty, the DEEPL_API_KEY environment variable is used.");
     note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     note->labelsize(12);
     note->labelcolor(DIM);
@@ -145,17 +145,8 @@ void SettingsWindow::select(size_t i){
 
 void SettingsWindow::on_key_changed(Fl_Widget*, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
-
-    // Without the spaces or line break a pasted key may come with, which
-    // DeepL would reject
-    std::string_view key = self->key_input->value();
-    const size_t first = key.find_first_not_of(" \t\r\n");
-    if (first == std::string_view::npos){
-        self->settings.api.deepl_key.clear();
-        return;
-    }
-    const size_t last = key.find_last_not_of(" \t\r\n");
-    self->settings.api.deepl_key = key.substr(first, last - first + 1);
+    // As typed: update() trims it
+    self->settings.update([self](Settings& s){ s.api.deepl_key = self->key_input->value(); });
 }
 
 void SettingsWindow::on_key_visibility(Fl_Widget*, void* data){
