@@ -10,6 +10,7 @@
 #include <FL/Fl_Double_Window.H>
 
 #include "core/jisho.h"
+#include "core/settings.h"
 
 // Only pointers to these are stored here, so the full headers are
 // included in main_window.cpp instead.
@@ -56,10 +57,12 @@ private:
     SmoothScroll* results = nullptr;
     WrappedText* results_text = nullptr;
 
+    // Filled in by settings_win, read when searching
+    Settings settings;
     // Created on the first click of the settings button. Not a plain
     // member: constructing a window makes it the current group, so while
     // win's widgets are being created it would take them in instead of win.
-    std::unique_ptr<SettingsWindow> settings;
+    std::unique_ptr<SettingsWindow> settings_win;
 
     // Bumped on every search. Only the latest search's result is shown,
     // so a slow earlier search can't overwrite a newer one.

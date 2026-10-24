@@ -88,6 +88,9 @@ static std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entri
 }
 
 MainWindow::MainWindow(){
+    // The environment's key, if any, is where the settings start from
+    if (const char* key = std::getenv("DEEPL_API_KEY")) settings.deepl_key = key;
+
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
 
@@ -148,19 +151,19 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 
     const Api api = self->search_bar->api();
 
-    // From the environment until there's a settings window. Checked before
-    // anything changes on screen: without a key there's no search at all.
+    // Checked before anything changes on screen: without a key there's no
+    // search at all. Copied for the search thread, since the settings may
+    // change while it runs.
     std::string deepl_key;
     if (api == Api::DeepL){
-        const char* key = std::getenv("DEEPL_API_KEY");
-        if (key == nullptr || *key == '\0'){
+        if (self->settings.deepl_key.empty()){
             // Modal: waits for OK before returning
             fl_alert("No DeepL API key found.\n\n"
                      "Input the DeepL key in the settings or "
                      "set the DEEPL_API_KEY environment variable to use DeepL.");
             return;
         }
-        deepl_key = key;
+        deepl_key = self->settings.deepl_key;
     }
 
     self->move_bar_to_top();
@@ -193,8 +196,8 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 
 void MainWindow::on_settings(Fl_Widget*, void* data){
     MainWindow* self = static_cast<MainWindow*>(data);
-    if (!self->settings) self->settings = std::make_unique<SettingsWindow>();
-    self->settings->show();
+    if (!self->settings_win) self->settings_win = std::make_unique<SettingsWindow>();
+    self->settings_win->show();
 }
 
 void MainWindow::on_search_done(void* data){
