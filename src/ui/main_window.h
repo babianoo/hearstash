@@ -14,6 +14,7 @@
 // Only pointers to these are stored here, so the full headers are
 // included in main_window.cpp instead.
 class SearchBar;
+class SettingsWindow;
 class SmoothScroll;
 class WrappedText;
 class Fl_Widget;
@@ -22,6 +23,9 @@ struct TextSpan;
 class MainWindow {
 public:
     MainWindow();
+    // Defined in main_window.cpp, where SettingsWindow is a complete type,
+    // which unique_ptr needs to delete it
+    ~MainWindow();
 
     // One app, one window: copying makes no sense
     MainWindow(const MainWindow&) = delete;
@@ -52,6 +56,11 @@ private:
     SmoothScroll* results = nullptr;
     WrappedText* results_text = nullptr;
 
+    // Created on the first click of the settings button. Not a plain
+    // member: constructing a window makes it the current group, so while
+    // win's widgets are being created it would take them in instead of win.
+    std::unique_ptr<SettingsWindow> settings;
+
     // Bumped on every search. Only the latest search's result is shown,
     // so a slow earlier search can't overwrite a newer one.
     unsigned latest_search = 0;
@@ -59,6 +68,7 @@ private:
     // Static because FLTK callbacks are plain functions; the MainWindow
     // comes in through data.
     static void on_search(Fl_Widget* w, void* data);
+    static void on_settings(Fl_Widget* w, void* data);
     // Runs on the UI thread, called by Fl::awake() from a search thread
     static void on_search_done(void* data);
 

@@ -35,6 +35,7 @@ add_executable(prototype
     src/ui/clipboard.cpp
     src/ui/main_window.cpp
     src/ui/search_bar.cpp
+    src/ui/settings_window.cpp
     src/ui/smooth_scroll.cpp
     src/ui/theme.cpp
     src/ui/wrapped_text.cpp

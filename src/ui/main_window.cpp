@@ -16,6 +16,7 @@
 #include "ui/clipboard.h"
 #include "ui/icons.h"
 #include "ui/search_bar.h"
+#include "ui/settings_window.h"
 #include "ui/theme.h"
 #include "ui/smooth_scroll.h"
 #include "ui/wrapped_text.h"
@@ -112,8 +113,7 @@ MainWindow::MainWindow(){
     results->hide();    // Shown by move_bar_to_top() on the first search
 
     // Settings button in the top-right corner, as tall as the search bar so
-    // it lines up with it once the bar moves to the top. Not hooked up yet:
-    // there's no settings window.
+    // it lines up with it once the bar moves to the top.
     Fl_Button* settings_btn = new Fl_Button(win.w() - MARGIN - 25, MARGIN, PILL_H, PILL_H);
     // Same box as the Search button; on a square button it's a circle.
     // Pressed it becomes FL_ROUND_DOWN_BOX, which has the same shape.
@@ -127,10 +127,13 @@ MainWindow::MainWindow(){
     settings_btn->image(gear);
     settings_btn->tooltip("Settings");
     settings_btn->clear_visible_focus();    // No dotted focus ring after a click
+    settings_btn->callback(on_settings, this);
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
     win.end();
 }
+
+MainWindow::~MainWindow() = default;
 
 void MainWindow::show(int argc, char** argv){
     win.show(argc, argv);
@@ -186,6 +189,12 @@ void MainWindow::on_search(Fl_Widget*, void* data){
         // result. Widgets may only be changed from there.
         Fl::awake(on_search_done, result);
     }).detach();    // Nothing waits for it; it ends on its own after awake()
+}
+
+void MainWindow::on_settings(Fl_Widget*, void* data){
+    MainWindow* self = static_cast<MainWindow*>(data);
+    if (!self->settings) self->settings = std::make_unique<SettingsWindow>();
+    self->settings->show();
 }
 
 void MainWindow::on_search_done(void* data){
