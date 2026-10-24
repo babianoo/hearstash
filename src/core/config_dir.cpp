@@ -4,7 +4,7 @@
 #include <stdexcept>
 
 // The same on every platform
-static constexpr const char* APP_DIR = "JapaneseHelper";
+static constexpr const char* APP_DIR = "Prototype";
 
 std::filesystem::path config_dir(){
 #ifdef _WIN32
