@@ -172,7 +172,8 @@ void MainWindow::on_search(Fl_Widget*, void* data){
         return;
     }
 
-    self->show_text(std::format("Searching for {}...", keyword));
+    // Not the keyword itself: a long paragraph would fill the results area
+    self->show_text(api == Api::DeepL ? "Translating..." : "Searching...");
     const unsigned id = ++self->latest_search;
 
     // The request can take seconds, and FLTK only redraws between
