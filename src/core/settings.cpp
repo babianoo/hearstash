@@ -24,7 +24,7 @@ static constexpr int VERSION = 1;
 // _WITH_DEFAULT: a key the file doesn't have keeps the field's default
 // instead of throwing.
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model, input_device)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, api, speech)
 
 Settings load_settings(const fs::path& file){

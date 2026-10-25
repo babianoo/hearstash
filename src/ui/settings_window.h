@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 // FLTK
@@ -12,6 +13,7 @@ class ModelDownloader;
 class SettingsStore;
 class Fl_Box;
 class Fl_Button;
+class Fl_Choice;
 class Fl_Group;
 class Fl_Progress;
 class Fl_Widget;
@@ -19,8 +21,9 @@ struct WhisperModel;
 
 // The window the gear button opens: a sidebar of categories on the left,
 // and on the right the page of the selected one. The API page has the
-// DeepL key, and the Speech-to-Text page the whisper models: a row each,
-// to download, delete and choose one. The other pages are empty.
+// DeepL key, and the Speech-to-Text page the whisper models, a row each
+// to download, delete and choose one, then the microphone to record
+// from. The other pages are empty.
 //
 // Changes go into the SettingsStore it was given as they're made, which
 // saves them: there's no Apply button.
@@ -74,6 +77,10 @@ private:
     Fl_Button* key_visibility_btn = nullptr;
     // On the Speech-to-Text page, indexed like WHISPER_MODELS
     std::vector<ModelRow> model_rows;
+    // Also there: "Default", then the microphones. mic_names[i] is what
+    // item i saves, "" for Default.
+    Fl_Choice* mic_choice = nullptr;
+    std::vector<std::string> mic_names;
 
     // Static because FLTK callbacks are plain functions; the
     // SettingsWindow comes in through data.
@@ -82,6 +89,7 @@ private:
     static void on_key_visibility(Fl_Widget* w, void* data);
     static void on_model_chosen(Fl_Widget* w, void* data);
     static void on_model_action(Fl_Widget* w, void* data);
+    static void on_mic_chosen(Fl_Widget* w, void* data);
 
     // Add a page's settings to the current group, a page starting at x
     // that's w wide
@@ -97,4 +105,6 @@ private:
     void refresh_model(const WhisperModel& model);
     void refresh_models();
     void delete_model(const WhisperModel& model);
+    // Lists the microphones plugged in now, with the saved one selected
+    void refresh_microphones();
 };

@@ -60,18 +60,23 @@ Recorder::~Recorder(){
     ma_context_uninit(&impl->context);
 }
 
-std::vector<std::string> Recorder::input_devices(){
+std::vector<std::string> list_input_devices(){
+    // A context of its own, so the settings window can list them without
+    // a Recorder. Takes a few milliseconds.
+    ma_context context;
+    if (ma_context_init(nullptr, 0, nullptr, &context) != MA_SUCCESS) return {};
+
     ma_device_info* playback;
     ma_uint32 playback_count;
     ma_device_info* capture;
     ma_uint32 capture_count;
-    // The infos belong to the context and change with the next call, so
-    // the names are copied
-    if (ma_context_get_devices(&impl->context, &playback, &playback_count, &capture, &capture_count) != MA_SUCCESS)
-        return {};
-
     std::vector<std::string> names;
-    for (ma_uint32 i = 0; i < capture_count; ++i) names.emplace_back(capture[i].name);
+    // The infos belong to the context, so the names are copied before
+    // it's freed
+    if (ma_context_get_devices(&context, &playback, &playback_count, &capture, &capture_count) == MA_SUCCESS)
+        for (ma_uint32 i = 0; i < capture_count; ++i) names.emplace_back(capture[i].name);
+
+    ma_context_uninit(&context);
     return names;
 }
 

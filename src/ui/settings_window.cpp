@@ -10,12 +10,14 @@
 #include <FL/fl_ask.H>
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Button.H>
+#include <FL/Fl_Choice.H>
 #include <FL/Fl_Group.H>
 #include <FL/fl_draw.H>
 #include <FL/Fl_Progress.H>
 #include <FL/Fl_Round_Button.H>
 #include <FL/Fl_SVG_Image.H>
 
+#include "core/recorder.h"
 #include "core/whisper_models.h"
 #include "ui/clipboard_input.h"
 #include "ui/icons.h"
@@ -215,11 +217,23 @@ void SettingsWindow::add_speech_settings(int x, int w){
         folder->labelsize(12);
         folder->labelcolor(DIM);
     } catch (const std::exception&){}
+    y += 20 + 14;
+
+    // Microphone: a label, then a dropdown as wide as the rows. Filled by
+    // refresh_microphones(), since what's plugged in changes.
+    Fl_Box* mic_label = new Fl_Box(left, y, right - left, 20, "Microphone");
+    mic_label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    y += mic_label->h() + 4;
+
+    mic_choice = new Fl_Choice(left, y, right - left, PILL_H);
+    mic_choice->clear_visible_focus();
+    mic_choice->callback(on_mic_chosen, this);
 }
 
 void SettingsWindow::show(){
     // A model may have been deleted or added outside the app meanwhile
     refresh_models();
+    refresh_microphones();
     win.show();
 }
 
@@ -375,4 +389,48 @@ void SettingsWindow::delete_model(const WhisperModel& model){
     if (!is_installed(model) && settings.get().speech.whisper_model == model.id)
         settings.update([](Settings& s){ s.speech.whisper_model.clear(); });
     refresh_model(model);
+}
+
+void SettingsWindow::on_mic_chosen(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const int i = self->mic_choice->value();
+    if (i < 0 || i >= static_cast<int>(self->mic_names.size())) return;
+    const std::string name = self->mic_names[static_cast<size_t>(i)];
+    self->settings.update([&name](Settings& s){ s.speech.input_device = name; });
+}
+
+void SettingsWindow::refresh_microphones(){
+    const std::string saved = settings.get().speech.input_device;
+    const std::vector<std::string> plugged_in = list_input_devices();
+
+    mic_names = {""};
+    mic_names.insert(mic_names.end(), plugged_in.begin(), plugged_in.end());
+    // The saved one stays in the list while it's unplugged, so opening the
+    // window then doesn't lose the choice. Recording uses the default
+    // meanwhile.
+    const bool saved_missing = !saved.empty() && std::ranges::find(plugged_in, saved) == plugged_in.end();
+    if (saved_missing) mic_names.push_back(saved);
+
+    mic_choice->clear();
+    for (size_t i = 0; i < mic_names.size(); ++i){
+        std::string label = i == 0 ? "Default" : mic_names[i];
+        if (saved_missing && i == mic_names.size() - 1) label += " (not plugged in)";
+
+        // add() reads '/', '&', '\' and more in a label as menu syntax,
+        // and a device name can have them. So each is added as a unique
+        // placeholder (add() replaces an item with the same label), then
+        // replace() sets the text as it is. Only '&' still means something
+        // when drawn, underlining the next letter, so it's doubled.
+        const int index = mic_choice->add(std::format("item{}", i).c_str());
+        std::string text;
+        for (char c : label){
+            text += c;
+            if (c == '&') text += '&';
+        }
+        mic_choice->replace(index, text.c_str());
+    }
+
+    const auto selected = std::ranges::find(mic_names, saved);
+    mic_choice->value(static_cast<int>(selected - mic_names.begin()));
+    mic_choice->redraw();
 }

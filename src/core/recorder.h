@@ -4,6 +4,11 @@
 #include <string>
 #include <vector>
 
+// The microphones' names, as Recorder::start takes them, from the system's
+// audio backend. Asked anew each time, so one plugged in since shows up.
+// Empty if there's no microphone, or no audio system to ask.
+std::vector<std::string> list_input_devices();
+
 // Records from a microphone into memory, in the format Transcriber wants:
 // mono, 16 kHz, floats from -1 to 1. Whatever the microphone gives is
 // converted to that. A recording holds at most MAX_SECONDS: after that
@@ -33,10 +38,6 @@ public:
     // miniaudio's device keeps a pointer to it
     Recorder(const Recorder&) = delete;
     Recorder& operator=(const Recorder&) = delete;
-
-    // The microphones' names, as start() takes them. Asked anew each time,
-    // so one plugged in since shows up.
-    std::vector<std::string> input_devices();
 
     // Starts recording from the microphone named device, or the default
     // one if device is empty or isn't plugged in any more. Does nothing if

@@ -25,6 +25,10 @@ struct SpeechSettings {
     // WHISPER_MODELS. Empty when none is chosen. It may not be downloaded
     // (yet, or any more).
     std::string whisper_model;
+    // The name of the microphone to record from, as list_input_devices()
+    // gives it. Empty for the system's default one, which is also used
+    // when this one isn't plugged in.
+    std::string input_device;
 };
 
 struct Settings {
