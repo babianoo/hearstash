@@ -2,8 +2,11 @@
 
 #include <array>
 #include <filesystem>
+#include <stop_token>
 #include <string>
 #include <string_view>
+
+#include "core/http.h"
 
 // The whisper.cpp models the settings window offers, and where they're
 // kept: data_dir()/models/ggml-<id>.bin. A model is installed if its file
@@ -50,6 +53,14 @@ std::string model_url(const WhisperModel& model);
 
 // False as well if the folder can't be read
 bool is_installed(const WhisperModel& model);
+
+// Downloads the model into models_dir(), creating it if needed, replacing
+// a copy that's already there. Blocks for minutes, so not on the UI
+// thread. on_progress and stop are http_download's. If it throws, the
+// .part file is deleted and an installed copy is left as it was.
+// Throws what http_download throws, or std::filesystem::filesystem_error.
+void download_model(const WhisperModel& model, const DownloadProgress& on_progress = {},
+                    std::stop_token stop = {});
 
 // Deletes the model, and what a download left of it. Fine if neither
 // exists. Throws std::filesystem::filesystem_error if one can't be

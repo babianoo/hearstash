@@ -45,6 +45,25 @@ bool is_installed(const WhisperModel& model){
     return fs::is_regular_file(model_path(model), ec);
 }
 
+void download_model(const WhisperModel& model, const DownloadProgress& on_progress,
+                    std::stop_token stop){
+    fs::create_directories(models_dir());
+
+    fs::path part = partial_path(model);
+    try {
+        http_download(model_url(model), part, on_progress, std::move(stop));
+    } catch (...){
+        // Starting over is simpler than resuming, and a cancelled large
+        // model shouldn't keep a gigabyte of disk
+        std::error_code ec;
+        fs::remove(part, ec);
+        throw;
+    }
+    // Only now does it have the model's own name, so a file with that
+    // name is always whole
+    fs::rename(part, model_path(model));
+}
+
 void remove_model(const WhisperModel& model){
     // Returns false rather than throwing when the file isn't there
     fs::remove(model_path(model));

@@ -1,5 +1,7 @@
 #include "core/http.h"
 
+#include <exception>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <format>
@@ -38,27 +40,80 @@ void http_global_init(){
 // curl_slist is curl's linked list of header lines
 using CurlHeaders = std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)>;
 
-// Sends the request set up on curl and returns the body.
-static std::string perform(CURL* curl, const std::string& url){
-    std::string body;
-
+// The options every request sets
+static void set_common_options(CURL* curl, const std::string& url){
     // libcurl is a C library, so it takes C strings
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+}
 
-    CURLcode res = curl_easy_perform(curl);
-    if (res != CURLE_OK) throw std::runtime_error(curl_easy_strerror(res));
+// Throws if the transfer failed or the status isn't 2xx
+static void check_response(CURL* curl, CURLcode res, const std::string& url){
+    // CURLE_HTTP_RETURNED_ERROR is CURLOPT_FAILONERROR stopping at the
+    // status, which the check below reports
+    if (res != CURLE_OK && res != CURLE_HTTP_RETURNED_ERROR)
+        throw std::runtime_error(curl_easy_strerror(res));
 
     long status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     if (status < 200 || status >= 300)
         throw HttpError(status, std::format("HTTP {} from {}", status, url));
+}
 
+// Sends the request set up on curl and returns the body.
+static std::string perform(CURL* curl, const std::string& url){
+    std::string body;
+
+    set_common_options(curl, url);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+
+    CURLcode res = curl_easy_perform(curl);
+    check_response(curl, res, url);
     return body;
+}
+
+// What http_download's callbacks share
+struct Download {
+    CURL* curl;
+    std::ofstream out;
+    const DownloadProgress& on_progress;
+    std::stop_token stop;
+    // What on_progress threw, rethrown once curl has returned: an
+    // exception can't pass through curl's C code
+    std::exception_ptr error;
+};
+
+// Like write_callback, but into the file. Returning less than the
+// chunk's size makes curl abort with CURLE_WRITE_ERROR.
+static size_t write_to_file(char* data, size_t size, size_t nmemb, void* d){
+    auto* download = static_cast<Download*>(d);
+    download->out.write(data, static_cast<std::streamsize>(size * nmemb));
+    return download->out ? size * nmemb : 0;
+}
+
+// curl calls it as data arrives, and at least once a second while none
+// does, so a stop is noticed even on a stalled connection. Returning
+// non-zero makes curl abort with CURLE_ABORTED_BY_CALLBACK.
+static int on_transfer_info(void* d, curl_off_t total, curl_off_t received, curl_off_t, curl_off_t){
+    auto* download = static_cast<Download*>(d);
+    if (download->stop.stop_requested()) return 1;
+    if (!download->on_progress) return 0;
+    // A redirect's own small body counts too, and would show as done
+    // before the real file starts
+    long status = 0;
+    curl_easy_getinfo(download->curl, CURLINFO_RESPONSE_CODE, &status);
+    if (status >= 300 && status < 400) return 0;
+
+    try {
+        download->on_progress(static_cast<std::uint64_t>(received), static_cast<std::uint64_t>(total));
+    } catch (...){
+        download->error = std::current_exception();
+        return 1;
+    }
+    return 0;
 }
 
 std::string http_get(const std::string& url){
@@ -86,6 +141,40 @@ std::string http_post(const std::string& url, const std::string& body,
     curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
     curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, list.get());
     return perform(curl.get(), url);
+}
+
+void http_download(const std::string& url, const std::filesystem::path& file,
+                   const DownloadProgress& on_progress, std::stop_token stop){
+    CurlHandle curl = make_handle();
+
+    // Binary, or on Windows every \n byte would be written as \r\n
+    Download download{curl.get(), std::ofstream(file, std::ios::binary), on_progress, std::move(stop), nullptr};
+    if (!download.out) throw std::runtime_error(std::format("Couldn't open {}", file.string()));
+
+    set_common_options(curl.get(), url);
+    // No CURLOPT_TIMEOUT, since a big file takes minutes. It gives up
+    // instead when less than 1 KB/s arrives for 30 seconds.
+    curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(curl.get(), CURLOPT_LOW_SPEED_LIMIT, 1024L);
+    curl_easy_setopt(curl.get(), CURLOPT_LOW_SPEED_TIME, 30L);
+    // Stops at an error status, so the error page isn't written to file
+    curl_easy_setopt(curl.get(), CURLOPT_FAILONERROR, 1L);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, write_to_file);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &download);
+    // The progress callback is off unless NOPROGRESS is
+    curl_easy_setopt(curl.get(), CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl.get(), CURLOPT_XFERINFOFUNCTION, on_transfer_info);
+    curl_easy_setopt(curl.get(), CURLOPT_XFERINFODATA, &download);
+
+    CURLcode res = curl_easy_perform(curl.get());
+    if (download.error) std::rethrow_exception(download.error);
+    if (res == CURLE_ABORTED_BY_CALLBACK) throw DownloadCancelled();
+    if (res == CURLE_WRITE_ERROR) throw std::runtime_error(std::format("Couldn't write {}", file.string()));
+    check_response(curl.get(), res, url);
+
+    // Writes what's still buffered, which can fail too, e.g. on a full disk
+    download.out.close();
+    if (!download.out) throw std::runtime_error(std::format("Couldn't write {}", file.string()));
 }
 
 std::string url_encode(std::string_view text){
