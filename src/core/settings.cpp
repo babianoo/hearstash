@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <system_error>
 
+#include "core/whisper_models.h"
+
 // JSON
 #include <nlohmann/json.hpp>
 
@@ -22,7 +24,8 @@ static constexpr int VERSION = 1;
 // _WITH_DEFAULT: a key the file doesn't have keeps the field's default
 // instead of throwing.
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, api)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, api, speech)
 
 Settings load_settings(const fs::path& file){
     std::ifstream in(file);
@@ -72,6 +75,12 @@ void sanitize(Settings& settings){
     std::string& key = settings.api.deepl_key;
     key.erase(key.find_last_not_of(" \t\r\n") + 1);
     key.erase(0, key.find_first_not_of(" \t\r\n"));
+
+    // An id the app doesn't offer, e.g. one a version with other models
+    // saved, or a typo in the file. Clearing it means nothing has to check
+    // find_model() for nullptr before using it.
+    std::string& model = settings.speech.whisper_model;
+    if (!model.empty() && !find_model(model)) model.clear();
 }
 
 std::string effective_deepl_key(const Settings& settings){

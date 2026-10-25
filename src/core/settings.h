@@ -7,7 +7,8 @@
 // as JSON. Grouped like the window's categories, each group an object in
 // the file:
 //
-//   {"api": {"deepl_key": "..."}, "version": 1}
+//   {"api": {"deepl_key": "..."}, "speech": {"whisper_model": "small"},
+//    "version": 1}
 //
 // The field names are the JSON keys, so renaming one changes the file
 // format. A field's default is what it gets when the file doesn't have it.
@@ -18,8 +19,17 @@ struct ApiSettings {
     std::string deepl_key;
 };
 
+// The Speech category
+struct SpeechSettings {
+    // The id of the whisper model to transcribe with, e.g. "small", from
+    // WHISPER_MODELS. Empty when none is chosen. It may not be downloaded
+    // (yet, or any more).
+    std::string whisper_model;
+};
+
 struct Settings {
     ApiSettings api;
+    SpeechSettings speech;
 };
 
 // Never throws: without a file, e.g. on the first run, the settings are
