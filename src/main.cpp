@@ -1,5 +1,10 @@
+#include <iostream>
+
 // FLTK
 #include <FL/Fl.H>
+
+// whisper.cpp
+#include <whisper.h>
 
 #include "core/config_dir.h"
 #include "core/http.h"
@@ -8,6 +13,10 @@
 #include "ui/settings_store.h"
 
 int main(int argc, char** argv){
+    // Shows whisper.cpp is linked, and which CPU features ggml was built
+    // with. Temporary, until the transcriber uses it.
+    std::cerr << "whisper.cpp: " << whisper_print_system_info() << '\n';
+
     // Before any thread exists: searches run on their own threads
     http_global_init();
     // Turns on FLTK's thread support, which Fl::awake() needs

@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.21...4.3.1)
-project(prototype CXX)
+# C as well, for whisper.cpp's ggml
+project(prototype C CXX)
 
 # Require C++23
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_compile_options(-Wall -Wextra)
 # Write build/compile_commands.json so clangd knows the include paths
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -26,6 +26,18 @@ pkg_check_modules(CAIRO QUIET cairo)
 # Without it (an X11-only system) the app uses FLTK's clipboard as is.
 pkg_check_modules(WAYLAND_CLIENT QUIET IMPORTED_TARGET wayland-client)
 
+# --- Dependencies built with the app (git submodules in external/) ---
+# Fetch them with: git submodule update --init
+# whisper.cpp, for speech to text. Linked statically, so there are no
+# whisper or ggml DLLs to ship next to the executable. Its tests and
+# examples are already off when it's built as part of another project.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build whisper.cpp and ggml as static libraries")
+# ggml uses its own thread pool instead. With MinGW, CMake finds OpenMP's
+# import library rather than libgomp.a, so even a -static build would
+# need libgomp-1.dll next to it.
+set(GGML_OPENMP OFF CACHE BOOL "Use OpenMP in ggml")
+add_subdirectory(external/whisper.cpp EXCLUDE_FROM_ALL)
+
 # Add new source files here, by path from the project root.
 add_executable(prototype
     src/main.cpp
@@ -44,6 +56,8 @@ add_executable(prototype
     src/ui/theme.cpp
     src/ui/wrapped_text.cpp
 )
+# Only on our own code: whisper.cpp sets its own warnings
+target_compile_options(prototype PRIVATE -Wall -Wextra)
 
 # Includes are written from src/, e.g. #include "core/anki/anki_connect.h"
 target_include_directories(prototype PRIVATE
@@ -55,6 +69,8 @@ target_link_libraries(prototype PRIVATE
     ${FLTK_LIBRARIES}
     CURL::libcurl
     nlohmann_json::nlohmann_json
+    # Brings its include directory and ggml's libraries with it
+    whisper
 )
 if(WAYLAND_CLIENT_FOUND)
     target_link_libraries(prototype PRIVATE PkgConfig::WAYLAND_CLIENT)
