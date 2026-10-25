@@ -10,13 +10,17 @@
 class ClipboardInput;
 class ModelDownloader;
 class SettingsStore;
+class Fl_Box;
 class Fl_Button;
 class Fl_Group;
+class Fl_Progress;
 class Fl_Widget;
+struct WhisperModel;
 
 // The window the gear button opens: a sidebar of categories on the left,
-// and on the right the page of the selected one. Only the API page has
-// settings so far (the DeepL key); the others are empty.
+// and on the right the page of the selected one. The API page has the
+// DeepL key, and the Speech-to-Text page the whisper models: a row each,
+// to download, delete and choose one. The other pages are empty.
 //
 // Changes go into the SettingsStore it was given as they're made, which
 // saves them: there's no Apply button.
@@ -24,6 +28,8 @@ class SettingsWindow {
 public:
     // settings and downloader have to outlive the window
     SettingsWindow(SettingsStore& settings, ModelDownloader& downloader);
+    // Stops listening to downloader
+    ~SettingsWindow();
 
     // One settings window per app: copying makes no sense
     SettingsWindow(const SettingsWindow&) = delete;
@@ -34,9 +40,24 @@ public:
     void show();
 
 private:
+    // A whisper model's row on the Speech-to-Text page, left to right
+    struct ModelRow {
+        // Radio button: chooses the model to transcribe with. Only active
+        // when it's installed.
+        Fl_Button* choose = nullptr;
+        // The download size, or in its place while downloading, progress
+        Fl_Box* size = nullptr;
+        Fl_Progress* progress = nullptr;
+        // Download, Cancel, Retry or Delete
+        Fl_Button* action = nullptr;
+        // As of the last refresh, to tell when a download has just finished
+        bool downloading = false;
+    };
+
     SettingsStore& settings;
-    // For the Speech-to-Text page, which isn't built yet
-    [[maybe_unused]] ModelDownloader& downloader;
+    ModelDownloader& downloader;
+    // From downloader.add_listener
+    int downloader_listener = -1;
 
     // Owned by SettingsWindow as a member, so no new/delete anywhere.
     // Closing the window only hides it, so its settings stay as they were.
@@ -51,17 +72,29 @@ private:
     // On the API page. Starts hidden; key_visibility_btn toggles that.
     ClipboardInput* key_input = nullptr;
     Fl_Button* key_visibility_btn = nullptr;
+    // On the Speech-to-Text page, indexed like WHISPER_MODELS
+    std::vector<ModelRow> model_rows;
 
     // Static because FLTK callbacks are plain functions; the
     // SettingsWindow comes in through data.
     static void on_category(Fl_Widget* w, void* data);
     static void on_key_changed(Fl_Widget* w, void* data);
     static void on_key_visibility(Fl_Widget* w, void* data);
+    static void on_model_chosen(Fl_Widget* w, void* data);
+    static void on_model_action(Fl_Widget* w, void* data);
 
-    // Adds the API page's settings to the current group, a page starting
-    // at x that's w wide
+    // Add a page's settings to the current group, a page starting at x
+    // that's w wide
     void add_api_settings(int x, int w);
+    void add_speech_settings(int x, int w);
     void select(size_t i);
     // Hides or shows the key, and switches the button's icon to match
     void set_key_hidden(bool hidden);
+    // Where in model_rows the row with widget w is
+    size_t model_row_of(const Fl_Widget* w) const;
+    // Makes model's row show its download and whether it's installed and
+    // chosen, which can change outside the window too
+    void refresh_model(const WhisperModel& model);
+    void refresh_models();
+    void delete_model(const WhisperModel& model);
 };
