@@ -38,6 +38,29 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build whisper.cpp and ggml as static libra
 set(GGML_OPENMP OFF CACHE BOOL "Use OpenMP in ggml")
 add_subdirectory(external/whisper.cpp EXCLUDE_FROM_ALL)
 
+# miniaudio, for recording from the microphone. It's one header, compiled
+# once by its miniaudio.c. Its own CMakeLists.txt also builds decoders,
+# effect nodes and install rules, so it's built here instead, with only
+# device I/O. The definitions are PUBLIC: code that includes miniaudio.h
+# has to see it as it was compiled.
+add_library(miniaudio STATIC external/miniaudio/miniaudio.c)
+target_include_directories(miniaudio PUBLIC external/miniaudio)
+target_compile_definitions(miniaudio PUBLIC
+    MA_NO_DECODING
+    MA_NO_ENCODING
+    MA_NO_GENERATION
+    MA_NO_RESOURCE_MANAGER
+    MA_NO_NODE_GRAPH
+    MA_NO_ENGINE
+)
+# It loads the audio backends (WASAPI, PulseAudio, ALSA...) when it runs,
+# so nothing else is needed to build it. On Linux that takes libdl, and
+# its device threads take pthreads.
+if(UNIX)
+    find_package(Threads REQUIRED)
+    target_link_libraries(miniaudio PUBLIC Threads::Threads ${CMAKE_DL_LIBS} m)
+endif()
+
 # Add new source files here, by path from the project root.
 add_executable(prototype
     src/main.cpp
@@ -60,7 +83,8 @@ add_executable(prototype
     src/ui/theme.cpp
     src/ui/wrapped_text.cpp
 )
-# Only on our own code: whisper.cpp sets its own warnings
+# Only on our own code: whisper.cpp sets its own warnings, and miniaudio's
+# aren't ours to fix
 target_compile_options(prototype PRIVATE -Wall -Wextra)
 
 # Includes are written from src/, e.g. #include "core/anki/anki_connect.h"
@@ -75,6 +99,7 @@ target_link_libraries(prototype PRIVATE
     nlohmann_json::nlohmann_json
     # Brings its include directory and ggml's libraries with it
     whisper
+    miniaudio
 )
 if(WAYLAND_CLIENT_FOUND)
     target_link_libraries(prototype PRIVATE PkgConfig::WAYLAND_CLIENT)
