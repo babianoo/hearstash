@@ -68,6 +68,7 @@ add_executable(prototype
     src/core/deepl.cpp
     src/core/jisho.cpp
     src/core/config_dir.cpp
+    src/core/recorder.cpp
     src/core/settings.cpp
     src/core/sha1.cpp
     src/core/transcriber.cpp
