@@ -11,7 +11,8 @@
 // The whisper.cpp models the settings window offers, and where they're
 // kept: data_dir()/models/ggml-<id>.bin. A model is installed if its file
 // is there. Downloads go to <file>.part and are only renamed to the file
-// once complete, so a file with the model's own name is always whole.
+// once complete and their SHA-1 matches, so a file with the model's own
+// name is always whole and undamaged.
 
 struct WhisperModel {
     // In the file name and settings.json, e.g. "small". Changing one makes
@@ -56,9 +57,12 @@ bool is_installed(const WhisperModel& model);
 
 // Downloads the model into models_dir(), creating it if needed, replacing
 // a copy that's already there. Blocks for minutes, so not on the UI
-// thread. on_progress and stop are http_download's. If it throws, the
-// .part file is deleted and an installed copy is left as it was.
-// Throws what http_download throws, or std::filesystem::filesystem_error.
+// thread. on_progress and stop are http_download's. Once downloaded, the
+// file is checked against the model's SHA-1, which takes a few seconds
+// for a large one with no progress reported. If it throws, the .part
+// file is deleted and an installed copy is left as it was.
+// Throws what http_download throws, std::runtime_error if the SHA-1
+// doesn't match, or std::filesystem::filesystem_error.
 void download_model(const WhisperModel& model, const DownloadProgress& on_progress = {},
                     std::stop_token stop = {});
 
