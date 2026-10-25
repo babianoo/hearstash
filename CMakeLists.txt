@@ -47,6 +47,7 @@ add_executable(prototype
     src/core/config_dir.cpp
     src/core/settings.cpp
     src/core/sha1.cpp
+    src/core/transcriber.cpp
     src/core/whisper_models.cpp
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
