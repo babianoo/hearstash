@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <functional>
 #include <iterator>
+#include <string>
 #include <utility>
 
 // FLTK
@@ -24,6 +25,31 @@
 
 // Indexed by Api
 static constexpr const char* API_NAMES[] = {"Jisho", "DeepL", "MyMemory"};
+
+// The "+" button's fill while recording
+static const Fl_Color RECORDING_RED = fl_rgb_color(220, 53, 53);
+// And while transcribing
+static const Fl_Color TRANSCRIBING_GREY = fl_rgb_color(222, 222, 222);
+
+// The mic icon, 16 pixels: dark grey like the other icons, for the menu,
+// or white for the "+" button on RECORDING_RED. Made once and kept for the
+// whole program; buttons and menus only borrow them.
+static Fl_SVG_Image* mic_icon(bool white){
+    static Fl_SVG_Image* dark = []{
+        auto* icon = new Fl_SVG_Image(nullptr, ICON_MIC);
+        icon->scale(16, 16);
+        return icon;
+    }();
+    static Fl_SVG_Image* light = []{
+        // Static too, in case the image keeps pointing into it
+        static std::string svg = ICON_MIC;
+        for (size_t at; (at = svg.find("#444")) != std::string::npos;) svg.replace(at, 4, "#fff");
+        auto* icon = new Fl_SVG_Image(nullptr, svg.c_str());
+        icon->scale(16, 16);
+        return icon;
+    }();
+    return white ? light : dark;
+}
 
 // Space Fl_Text_Display leaves between its edges and the text: 3 pixels
 // on the left and right, 1 on the top and bottom
@@ -312,6 +338,52 @@ SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
 
     end();
     place_children();
+    show_record_state();
+}
+
+void SearchBar::record_state(RecordState state){
+    current_record_state = state;
+    show_record_state();
+}
+
+void SearchBar::show_record_state(){
+    // At rest first, then changed to match
+    api_btn->box(FL_NO_BOX);
+    api_btn->down_box(FL_ROUND_DOWN_BOX);
+    api_btn->label("+");
+    api_btn->image(nullptr);
+    api_btn->tooltip(API_NAMES[static_cast<int>(current_api)]);
+    api_btn->activate();
+
+    if (current_record_state == RecordState::Recording){
+        // A red circle with a white mic. Pressed it stays a circle, a
+        // little darker.
+        api_btn->box(FL_OVAL_BOX);
+        api_btn->down_box(FL_OVAL_BOX);
+        api_btn->color(RECORDING_RED);
+        api_btn->selection_color(fl_darker(RECORDING_RED));
+        api_btn->label(nullptr);
+        api_btn->image(mic_icon(true));
+        api_btn->tooltip("Recording: click to stop");
+    } else if (current_record_state == RecordState::Transcribing){
+        // Greyed out until the text is in, on a light grey circle: a greyed
+        // "+" alone looks much like the one at rest
+        api_btn->box(FL_OVAL_BOX);
+        api_btn->color(TRANSCRIBING_GREY);
+        api_btn->deactivate();
+        api_btn->tooltip("Transcribing...");
+    }
+
+    // The button has no box at rest, so the pill behind it has to be drawn
+    // again to cover a red circle
+    redraw();
+}
+
+void SearchBar::set_text(const std::string& text){
+    // on_text_modified() then fits the bar to it
+    input->buffer()->text(text.c_str());
+    input->insert_position(input->buffer()->length());
+    input->show_insert_position();
 }
 
 void SearchBar::on_input_hover(std::function<void(bool hovered)> listener){
@@ -416,6 +488,13 @@ void SearchBar::draw(){
 
 void SearchBar::on_api_btn(Fl_Widget* w, void* data){
     SearchBar* self = static_cast<SearchBar*>(data);
+
+    // While recording it's the red button that stops it
+    if (self->current_record_state == RecordState::Recording){
+        if (self->record_listener) self->record_listener();
+        return;
+    }
+
     const int current = static_cast<int>(self->current_api);
 
     // Record Input, a divider, then one item per API.
@@ -424,22 +503,14 @@ void SearchBar::on_api_btn(Fl_Widget* w, void* data){
     constexpr int RECORD = 0, FIRST_API = 1;
     Fl_Menu_Item items[FIRST_API + std::size(API_NAMES) + 1]{};
 
-    // Made once and kept for the whole program; menus only borrow it.
-    static Fl_SVG_Image* mic_icon = []{
-        auto* icon = new Fl_SVG_Image(nullptr, ICON_MIC);
-        icon->scale(16, 16);
-        return icon;
-    }();
-
     // Icon and text side by side. Only needs to live until popup() returns.
     Fl_Multi_Label record_label{};
-    record_label.labela = reinterpret_cast<const char*>(mic_icon);
+    record_label.labela = reinterpret_cast<const char*>(mic_icon(false));
     record_label.typea = FL_IMAGE_LABEL;
     record_label.labelb = "  Record Input";
     record_label.typeb = FL_NORMAL_LABEL;
     items[RECORD].multi_label(&record_label);
-    // Greyed out until speech-to-text is added to the project
-    items[RECORD].flags = FL_MENU_INACTIVE | FL_MENU_DIVIDER;
+    items[RECORD].flags = FL_MENU_DIVIDER;
 
     for (int i = 0; i < static_cast<int>(std::size(API_NAMES)); ++i){
         items[FIRST_API + i].label(API_NAMES[i]);
@@ -448,7 +519,11 @@ void SearchBar::on_api_btn(Fl_Widget* w, void* data){
 
     // Opens just below the button. nullptr if the user clicks away.
     const Fl_Menu_Item* picked = items->popup(w->x(), w->y() + w->h(), nullptr, &items[FIRST_API + current]);
-    if (picked == nullptr || picked == &items[RECORD]) return;
+    if (picked == nullptr) return;
+    if (picked == &items[RECORD]){
+        if (self->record_listener) self->record_listener();
+        return;
+    }
 
     const int index = static_cast<int>(picked - items) - FIRST_API;
     self->current_api = static_cast<Api>(index);

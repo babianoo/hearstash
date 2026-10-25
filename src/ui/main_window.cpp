@@ -118,6 +118,8 @@ MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
     // Only the scrollbar under the mouse shows, so the bar's and the
     // results' don't look like two of the same
     search_bar->on_input_hover([this](bool hovered){ results->show_scrollbar(!hovered); });
+    // Record Input in the "+" menu, and the red "+" that stops it
+    search_bar->on_record([this]{ on_record(); });
 
     // Settings button in the top-right corner, as tall as the search bar so
     // it lines up with it once the bar moves to the top.
@@ -141,6 +143,22 @@ MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
 }
 
 MainWindow::~MainWindow() = default;
+
+// Steps through the states without recording anything, so Record Input
+// can be tried out. Temporary, until recording is connected.
+void MainWindow::on_record(){
+    if (search_bar->record_state() == RecordState::Idle){
+        search_bar->record_state(RecordState::Recording);
+        return;
+    }
+    // Stopped: pretends to transcribe for a second and a half
+    search_bar->record_state(RecordState::Transcribing);
+    Fl::add_timeout(1.5, [](void* data){
+        auto* self = static_cast<MainWindow*>(data);
+        self->search_bar->record_state(RecordState::Idle);
+        self->search_bar->set_text("今日はいい天気ですね");
+    }, this);
+}
 
 void MainWindow::show(int argc, char** argv){
     win.show(argc, argv);

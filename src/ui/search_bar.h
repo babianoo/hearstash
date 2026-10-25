@@ -17,8 +17,12 @@ class SearchInput;
 // Same APIs as japanese-helper. Order matches the API menu.
 enum class Api { Jisho, DeepL, MyMemory };
 
-// Google-style pill search bar: "+" API menu in the left end, text box in
-// the middle, Search button in the right end. It's PILL_H tall while the
+// What the "+" button shows about recording speech, which the window sets
+enum class RecordState { Idle, Recording, Transcribing };
+
+// Google-style pill search bar: "+" menu in the left end, text box in the
+// middle, Search button in the right end. The menu has Record Input and
+// the APIs. While recording, the "+" button is a red mic that stops it. It's PILL_H tall while the
 // text fits on one line. Longer text wraps, and the bar grows down with
 // it, up to MAX_LINES lines; past that the text box scrolls.
 //
@@ -46,6 +50,16 @@ public:
     // and false when it leaves, e.g. to hide another scrollbar meanwhile
     void on_input_hover(std::function<void(bool hovered)> listener);
 
+    // listener is called when the user picks Record Input, or clicks the
+    // "+" button while Recording to stop. The window does it, then sets
+    // the state to match.
+    void on_record(std::function<void()> listener){ record_listener = std::move(listener); }
+    void record_state(RecordState state);
+    RecordState record_state() const { return current_record_state; }
+    // Puts text in the text box, replacing what's there, with the cursor
+    // at its end, e.g. what was said
+    void set_text(const std::string& text);
+
     // Keeps the API button its size, centered, and stretches the text box
     // and Search button to the bar's height. Fl_Group's own resize() would
     // stretch the API button too.
@@ -64,6 +78,8 @@ private:
     Fl_Box* divider = nullptr;
 
     Api current_api = Api::Jisho;
+    RecordState current_record_state = RecordState::Idle;
+    std::function<void()> record_listener;
 
     // Height of a line of text. 0 until the bar is shown, since measuring
     // the font needs the display.
@@ -81,6 +97,8 @@ private:
     void place_children();
     // Grows or shrinks the bar to fit the text, or one line when collapsed
     void fit_text();
+    // Makes the "+" button show current_record_state
+    void show_record_state();
 
     // Static because FLTK callbacks are plain functions; the SearchBar
     // comes in through data.

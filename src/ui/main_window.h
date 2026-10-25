@@ -79,6 +79,8 @@ private:
     // Runs on the UI thread, called by Fl::awake() from a search thread
     static void on_search_done(void* data);
 
+    // Record Input was picked, or the red "+" clicked to stop
+    void on_record();
     void move_bar_to_top();
     // Fills the space under the search bar, which grows with long text
     void place_results();
