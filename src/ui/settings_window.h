@@ -8,6 +8,7 @@
 // Only pointers and references to these are stored here, so the full
 // headers are included in settings_window.cpp instead.
 class ClipboardInput;
+class ModelDownloader;
 class SettingsStore;
 class Fl_Button;
 class Fl_Group;
@@ -21,8 +22,8 @@ class Fl_Widget;
 // saves them: there's no Apply button.
 class SettingsWindow {
 public:
-    // settings has to outlive the window
-    explicit SettingsWindow(SettingsStore& settings);
+    // settings and downloader have to outlive the window
+    SettingsWindow(SettingsStore& settings, ModelDownloader& downloader);
 
     // One settings window per app: copying makes no sense
     SettingsWindow(const SettingsWindow&) = delete;
@@ -34,6 +35,8 @@ public:
 
 private:
     SettingsStore& settings;
+    // For the Speech-to-Text page, which isn't built yet
+    [[maybe_unused]] ModelDownloader& downloader;
 
     // Owned by SettingsWindow as a member, so no new/delete anywhere.
     // Closing the window only hides it, so its settings stay as they were.

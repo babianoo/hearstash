@@ -88,7 +88,8 @@ static std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entri
     return spans;
 }
 
-MainWindow::MainWindow(SettingsStore& settings) : settings(settings){
+MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
+    : settings(settings), downloader(downloader){
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
 
@@ -194,7 +195,7 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 
 void MainWindow::on_settings(Fl_Widget*, void* data){
     MainWindow* self = static_cast<MainWindow*>(data);
-    if (!self->settings_win) self->settings_win = std::make_unique<SettingsWindow>(self->settings);
+    if (!self->settings_win) self->settings_win = std::make_unique<SettingsWindow>(self->settings, self->downloader);
     self->settings_win->show();
 }
 

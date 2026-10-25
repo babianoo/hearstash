@@ -13,6 +13,7 @@
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in main_window.cpp instead.
+class ModelDownloader;
 class SearchBar;
 class SettingsStore;
 class SettingsWindow;
@@ -23,8 +24,8 @@ struct TextSpan;
 
 class MainWindow {
 public:
-    // settings has to outlive the window
-    explicit MainWindow(SettingsStore& settings);
+    // settings and downloader have to outlive the window
+    MainWindow(SettingsStore& settings, ModelDownloader& downloader);
     // Defined in main_window.cpp, where SettingsWindow is a complete type,
     // which unique_ptr needs to delete it
     ~MainWindow();
@@ -60,6 +61,8 @@ private:
 
     // Changed by settings_win, read when searching
     SettingsStore& settings;
+    // Only passed on to settings_win
+    ModelDownloader& downloader;
     // Created on the first click of the settings button. Not a plain
     // member: constructing a window makes it the current group, so while
     // win's widgets are being created it would take them in instead of win.

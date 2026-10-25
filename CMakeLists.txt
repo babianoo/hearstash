@@ -50,6 +50,7 @@ add_executable(prototype
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
     src/ui/main_window.cpp
+    src/ui/model_downloader.cpp
     src/ui/search_bar.cpp
     src/ui/settings_store.cpp
     src/ui/settings_window.cpp

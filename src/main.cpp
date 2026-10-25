@@ -10,6 +10,7 @@
 #include "core/http.h"
 #include "ui/theme.h"
 #include "ui/main_window.h"
+#include "ui/model_downloader.h"
 #include "ui/settings_store.h"
 
 int main(int argc, char** argv){
@@ -17,7 +18,8 @@ int main(int argc, char** argv){
     // with. Temporary, until the transcriber uses it.
     std::cerr << "whisper.cpp: " << whisper_print_system_info() << '\n';
 
-    // Before any thread exists: searches run on their own threads
+    // Before any thread exists: searches and downloads run on their own
+    // threads
     http_global_init();
     // Turns on FLTK's thread support, which Fl::awake() needs
     Fl::lock();
@@ -28,8 +30,12 @@ int main(int argc, char** argv){
     // That's once Fl::run() returns, and it then saves a change still
     // waiting to be saved.
     SettingsStore settings(config_dir() / "settings.json");
+    // The same goes for it. Owned here rather than by a window, so a
+    // download keeps going while the settings window is closed. Quitting
+    // cancels the downloads still running.
+    ModelDownloader downloader;
 
-    MainWindow main_win(settings);
+    MainWindow main_win(settings, downloader);
     main_win.show(argc, argv);
 
     return Fl::run();

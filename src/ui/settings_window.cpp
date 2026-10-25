@@ -54,7 +54,8 @@ public:
     }
 };
 
-SettingsWindow::SettingsWindow(SettingsStore& settings) : settings(settings){
+SettingsWindow::SettingsWindow(SettingsStore& settings, ModelDownloader& downloader)
+    : settings(settings), downloader(downloader){
     // win is the current group here, like in MainWindow
 
     // A bit darker than the pages, so it stands apart from them. Computed
