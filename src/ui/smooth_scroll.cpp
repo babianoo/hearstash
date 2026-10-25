@@ -48,7 +48,7 @@ int SmoothScroll::handle(int event){
     // A click (e.g. on the scrollbar) takes over from a glide in progress
     if (event == FL_PUSH) stop_glide();
 
-    if (event == FL_PUSH && Fl::event_x() >= bar_x() && max_y() > 0){
+    if (event == FL_PUSH && scrollbar_shown && Fl::event_x() >= bar_x() && max_y() > 0){
         int top, height;
         handle_box(top, height);
         // Grabbing the handle keeps it where it is under the mouse; a click
@@ -83,6 +83,7 @@ void SmoothScroll::draw(){
     // The whole strip, since scrolling just copied it along with the content
     fl_color(color());
     fl_rectf(bar_x(), y() + Fl::box_dy(box()), BAR_W, h() - Fl::box_dh(box()));
+    if (!scrollbar_shown) return;
 
     int top, height;
     handle_box(top, height);
@@ -97,6 +98,12 @@ void SmoothScroll::scroll_to_top(){
 
 int SmoothScroll::content_w() const {
     return w() - Fl::box_dw(box()) - BAR_W;
+}
+
+void SmoothScroll::show_scrollbar(bool show){
+    if (show == scrollbar_shown) return;
+    scrollbar_shown = show;
+    redraw();
 }
 
 int SmoothScroll::max_y() const {

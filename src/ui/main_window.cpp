@@ -115,6 +115,9 @@ MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
     results->hide();    // Shown by move_bar_to_top() on the first search
     // Long text makes the bar taller; the results start under it
     search_bar->on_height_change([this]{ place_results(); });
+    // Only the scrollbar under the mouse shows, so the bar's and the
+    // results' don't look like two of the same
+    search_bar->on_input_hover([this](bool hovered){ results->show_scrollbar(!hovered); });
 
     // Settings button in the top-right corner, as tall as the search bar so
     // it lines up with it once the bar moves to the top.

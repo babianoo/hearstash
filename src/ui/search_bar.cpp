@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <climits>
 #include <cstdlib>
+#include <functional>
 #include <iterator>
+#include <utility>
 
 // FLTK
 #include <FL/Fl.H>
@@ -43,7 +45,9 @@ static const Fl_Color HANDLE_COLOR = fl_rgb_color(160, 160, 160);
 // puts the rest on a second line, so a long one-line paste breaks.
 //
 // It never shows FLTK's scrollbars, which have arrow buttons. The wheel
-// scrolls it instead, and draw() adds a thin handle when it can scroll.
+// scrolls it instead, and draw() adds a thin handle when it can scroll and
+// the mouse is over it. Only then, so it doesn't look like a second
+// scrollbar for the results under it.
 class SearchInput : public Fl_Text_Editor {
 public:
     SearchInput(int x, int y, int w, int h);
@@ -53,6 +57,10 @@ public:
     // quicker for a long text.
     int lines(int max_lines = INT_MAX) const;
 
+    // Called with true when the mouse moves onto the text box, and false
+    // when it leaves
+    std::function<void(bool hovered)> hover_listener;
+
     void resize(int x, int y, int w, int h) override;
     int handle(int event) override;
 
@@ -60,6 +68,9 @@ protected:
     void draw() override;
 
 private:
+    // Whether the mouse is over the text box, which shows the handle
+    bool hovered = false;
+
     // Wraps at a fixed width, before the handle's strip, instead of at the
     // edge (WRAP_AT_BOUNDS): then lines() is right straight away, rather
     // than after the next draw(), and doesn't change with the handle
@@ -114,6 +125,14 @@ void SearchInput::wrap_to_width(){
 }
 
 int SearchInput::handle(int event){
+    if (event == FL_ENTER || event == FL_LEAVE){
+        hovered = event == FL_ENTER;
+        redraw();    // Shows or hides the handle
+        if (hover_listener) hover_listener(hovered);
+        Fl_Text_Editor::handle(event);    // Sets the mouse cursor
+        return 1;    // Needed to get FL_LEAVE too
+    }
+
     if (event == FL_KEYBOARD){
         const int mods = Fl::event_state() & (FL_META | FL_CTRL | FL_ALT);
         const bool shift = Fl::event_state(FL_SHIFT);
@@ -201,7 +220,7 @@ void SearchInput::draw(){
     fl_rectf(bar_x, y(), HANDLE_W, h());
 
     // None while there's just one line on screen, e.g. when collapsed
-    if (mNVisibleLines < 2 || total <= mNVisibleLines) return;
+    if (!hovered || mNVisibleLines < 2 || total <= mNVisibleLines) return;
 
     const int track_y = y() + 2, track_h = h() - 4;
     const int handle_h = std::max(track_h * mNVisibleLines / total, MIN_HANDLE_H);
@@ -209,6 +228,46 @@ void SearchInput::draw(){
     const int handle_y = track_y + (track_h - handle_h) * scrolled / (total - mNVisibleLines);
     fl_draw_box(FL_RFLAT_BOX, bar_x, handle_y, HANDLE_W, handle_h, HANDLE_COLOR);
 }
+
+// Draws boxtype b h tall the way it looks pill_h tall: its top half at the
+// top, its bottom half at the bottom, and its middle row repeated in
+// between. A round box drawn taller gets rounder instead, until it's a
+// circle, which would cut into what's inside.
+static void draw_stretched(Fl_Boxtype b, int x, int y, int w, int h, Fl_Color c, int pill_h){
+    if (h <= pill_h){
+        fl_draw_box(b, x, y, w, h, c);
+        return;
+    }
+    const int top = pill_h / 2, bottom = pill_h - top;
+    fl_push_clip(x, y, w, top);
+    fl_draw_box(b, x, y, w, pill_h, c);
+    fl_pop_clip();
+    fl_push_clip(x, y + h - bottom, w, bottom);
+    fl_draw_box(b, x, y + h - pill_h, w, pill_h, c);
+    fl_pop_clip();
+    for (int row = y + top; row < y + h - bottom; ++row){
+        fl_push_clip(x, row, w, 1);
+        fl_draw_box(b, x, row - (top - 1), w, pill_h, c);    // Its last top row
+        fl_pop_clip();
+    }
+}
+
+// Search button that's as tall as the bar, with the ends of a PILL_H - 6
+// tall one. Never draws a focus ring: it can't take focus (see below), as
+// FLTK's ring for a round box would be an oval when it's tall.
+class SearchButton : public Fl_Button {
+public:
+    using Fl_Button::Fl_Button;
+
+protected:
+    void draw() override {
+        // As in Fl_Button::draw()
+        const Fl_Color col = value() ? selection_color() : color();
+        const Fl_Boxtype b = value() ? (down_box() ? down_box() : fl_down(box())) : box();
+        draw_stretched(b, x(), y(), w(), h(), col, PILL_H - 6);
+        draw_label();
+    }
+};
 
 SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
     // Fl_Group's constructor calls begin(), so widgets created below are
@@ -229,8 +288,9 @@ SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
     input->callback(on_submit, this);
     input->buffer()->add_modify_callback(on_text_modified, this);
 
-    search_btn = new Fl_Button(x, y, w, PILL_H, "Search");
+    search_btn = new SearchButton(x, y, w, PILL_H, "Search");
     search_btn->box(FL_ROUND_UP_BOX);
+    search_btn->clear_visible_focus();    // Like the API button
     search_btn->callback(on_submit, this);
 
     // 1px line, 85% of the way from the text color to the input's white,
@@ -252,6 +312,10 @@ SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
 
     end();
     place_children();
+}
+
+void SearchBar::on_input_hover(std::function<void(bool hovered)> listener){
+    input->hover_listener = std::move(listener);
 }
 
 std::string SearchBar::text() const {
@@ -303,21 +367,24 @@ int SearchBar::height_for(int lines) const {
 }
 
 void SearchBar::place_children(){
-    const int X = x(), Y = y(), W = w();
+    const int X = x(), Y = y(), W = w(), H = h();
     const int btn_w = 80, pad = 3;
 
-    // API button in the pill's left end: a circle as tall as the Search
-    // button, and concentric with the pill's curve.
+    // The API button stays centered as the bar grows. On one line that
+    // puts it, a circle as tall as the Search button, in the pill's left
+    // end, concentric with its curve.
     const int circle_d = PILL_H - 2 * pad;
     const int circle_x = X + pad;
-    api_btn->resize(circle_x, Y + pad, circle_d, circle_d);
+    api_btn->resize(circle_x, Y + (H - circle_d) / 2, circle_d, circle_d);
 
-    // Faint divider between the API button and the text box
+    // Faint divider between the API button and the text box, as tall as
+    // the text box
     const int divider_x = circle_x + circle_d + 4;
-    divider->resize(divider_x, Y + 8, 1, PILL_H - 16);
+    divider->resize(divider_x, Y + 8, 1, H - 16);
 
+    // The Search button grows with the bar
     const int btn_x = X + W - btn_w - pad;
-    search_btn->resize(btn_x, Y + pad, btn_w, PILL_H - 2 * pad);
+    search_btn->resize(btn_x, Y + pad, btn_w, H - 2 * pad);
 
     // Starts a little after the divider and stops a little before the
     // button. Exactly shown_lines tall once the font is known, so no line
@@ -342,41 +409,9 @@ void SearchBar::fit_text(){
 }
 
 void SearchBar::draw(){
-    if (damage() & ~FL_DAMAGE_CHILD) draw_pill();
+    // The pill, stretched to the bar's height
+    if (damage() & ~FL_DAMAGE_CHILD) draw_stretched(box(), x(), y(), w(), h(), color(), PILL_H);
     draw_children();
-}
-
-// A taller FL_ROUND_UP_BOX gets rounder, which would cut into the text. So
-// it's drawn PILL_H tall twice, for its top and bottom halves, and the
-// straight part between them gets the colors its sides have at the middle
-// (see gtk_round_up_box() in FLTK's fl_gtk.cxx).
-void SearchBar::draw_pill(){
-    if (h() <= PILL_H){
-        draw_box();
-        return;
-    }
-
-    const int half = PILL_H / 2;
-    fl_push_clip(x(), y(), w(), half);
-    draw_box(box(), x(), y(), w(), PILL_H, color());
-    fl_pop_clip();
-    fl_push_clip(x(), y() + h() - half, w(), half);
-    draw_box(box(), x(), y() + h() - PILL_H, w(), PILL_H, color());
-    fl_pop_clip();
-
-    const int mid_y = y() + half, mid_h = h() - 2 * half;
-    fl_color(color());
-    fl_rectf(x() + 1, mid_y, w() - 2, mid_h);
-    // Outline on both sides, and the shadow inside the right one
-    const Fl_Color outline = fl_color_average(FL_BLACK, color(), 0.5f);
-    fl_color(outline);
-    fl_yxline(x(), mid_y, mid_y + mid_h - 1);
-    fl_yxline(x() + w() - 1, mid_y, mid_y + mid_h - 1);
-    const float shadow[] = {0.1f, 0.05f, 0.025f};
-    for (int i = 0; i < 3; ++i){
-        fl_color(fl_color_average(FL_BLACK, color(), shadow[i]));
-        fl_yxline(x() + w() - 2 - i, mid_y, mid_y + mid_h - 1);
-    }
 }
 
 void SearchBar::on_api_btn(Fl_Widget* w, void* data){

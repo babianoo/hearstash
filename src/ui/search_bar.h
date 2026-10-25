@@ -42,8 +42,13 @@ public:
     // move what's under it
     void on_height_change(std::function<void()> listener){ height_listener = std::move(listener); }
 
-    // Keeps the buttons on the top line and gives the text box the rest.
-    // Fl_Group's own resize() would stretch the buttons along with the bar.
+    // listener is called with true when the mouse moves onto the text box,
+    // and false when it leaves, e.g. to hide another scrollbar meanwhile
+    void on_input_hover(std::function<void(bool hovered)> listener);
+
+    // Keeps the API button its size, centered, and stretches the text box
+    // and Search button to the bar's height. Fl_Group's own resize() would
+    // stretch the API button too.
     void resize(int x, int y, int w, int h) override;
     int handle(int event) override;
 
@@ -76,8 +81,6 @@ private:
     void place_children();
     // Grows or shrinks the bar to fit the text, or one line when collapsed
     void fit_text();
-    // The pill stretched to the bar's height
-    void draw_pill();
 
     // Static because FLTK callbacks are plain functions; the SearchBar
     // comes in through data.

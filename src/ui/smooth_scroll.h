@@ -27,11 +27,16 @@ public:
     // Width a child can use without ending up under the scrollbar
     int content_w() const;
 
+    // Hides or shows the scrollbar. Hidden, the wheel still scrolls, but
+    // the scrollbar's strip is left empty and can't be dragged.
+    void show_scrollbar(bool show);
+
 private:
     // Where the current glide is heading, as a yposition()
     int target_y = 0;
     bool gliding = false;
 
+    bool scrollbar_shown = true;
     // While the scrollbar's handle is being dragged
     bool dragging = false;
     // Where in the handle it was grabbed, from its top
