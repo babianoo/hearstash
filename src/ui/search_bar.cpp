@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <climits>
 #include <cstdlib>
+#include <format>
 #include <functional>
 #include <iterator>
 #include <string>
@@ -377,6 +378,13 @@ void SearchBar::show_record_state(){
     // The button has no box at rest, so the pill behind it has to be drawn
     // again to cover a red circle
     redraw();
+}
+
+void SearchBar::record_time(int seconds){
+    if (current_record_state != RecordState::Recording) return;
+    // Only when it changes: a new tooltip text redraws a tooltip on screen
+    const std::string tip = std::format("Recording {}:{:02}: click to stop", seconds / 60, seconds % 60);
+    if (!api_btn->tooltip() || tip != api_btn->tooltip()) api_btn->copy_tooltip(tip.c_str());
 }
 
 void SearchBar::set_text(const std::string& text){

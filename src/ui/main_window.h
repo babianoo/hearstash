@@ -4,16 +4,19 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 // FLTK
 #include <FL/Fl_Double_Window.H>
 
 #include "core/jisho.h"
+#include "core/transcriber.h"
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in main_window.cpp instead.
 class ModelDownloader;
+class Recorder;
 class SearchBar;
 class SettingsStore;
 class SettingsWindow;
@@ -26,8 +29,9 @@ class MainWindow {
 public:
     // settings and downloader have to outlive the window
     MainWindow(SettingsStore& settings, ModelDownloader& downloader);
-    // Defined in main_window.cpp, where SettingsWindow is a complete type,
-    // which unique_ptr needs to delete it
+    // Defined in main_window.cpp, where SettingsWindow and Recorder are
+    // complete types, which unique_ptr needs to delete them. Stops a
+    // transcription still running and waits for it.
     ~MainWindow();
 
     // One app, one window: copying makes no sense
@@ -45,6 +49,13 @@ private:
         std::vector<JishoEntry> entries{};          // Jisho
         std::optional<std::string> translation{};   // DeepL
         std::string error{};    // Non-empty if the search failed
+    };
+
+    // What the transcription thread hands back to the UI thread
+    struct Transcription {
+        MainWindow* win;
+        std::string text;
+        std::string error{};    // Non-empty if it failed
     };
 
     // Owned by MainWindow as a member, so no new/delete anywhere.
@@ -72,15 +83,37 @@ private:
     // so a slow earlier search can't overwrite a newer one.
     unsigned latest_search = 0;
 
+    // Created the first time Record Input is picked, so a machine without
+    // audio only finds out then
+    std::unique_ptr<Recorder> recorder;
+    // Keeps the chosen model loaded between recordings. Only the
+    // transcription thread uses it, one at a time.
+    Transcriber transcriber;
+    // Joinable while transcribing. Declared after transcriber, so it's
+    // destroyed first: a jthread requests stop and joins when it dies,
+    // and the thread uses transcriber until then.
+    std::jthread transcription_thread;
+
     // Static because FLTK callbacks are plain functions; the MainWindow
     // comes in through data.
     static void on_search(Fl_Widget* w, void* data);
     static void on_settings(Fl_Widget* w, void* data);
     // Runs on the UI thread, called by Fl::awake() from a search thread
     static void on_search_done(void* data);
+    // A few times a second while recording: stops at the limit, and shows
+    // how long it's been
+    static void on_record_tick(void* data);
+    // Runs on the UI thread, called by Fl::awake() from the transcription
+    // thread
+    static void on_transcribed(void* data);
 
     // Record Input was picked, or the red "+" clicked to stop
     void on_record();
+    void start_recording();
+    // Stops recording and starts transcribing what was recorded
+    void stop_recording();
+    // Created on first use, for the same reason as settings_win
+    SettingsWindow& settings_window();
     void move_bar_to_top();
     // Fills the space under the search bar, which grows with long text
     void place_results();

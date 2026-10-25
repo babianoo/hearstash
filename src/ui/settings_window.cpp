@@ -237,6 +237,11 @@ void SettingsWindow::show(){
     win.show();
 }
 
+void SettingsWindow::show_speech_to_text(){
+    select(SPEECH_TO_TEXT);
+    show();
+}
+
 void SettingsWindow::on_category(Fl_Widget* w, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
     const auto it = std::ranges::find(self->categories, w);

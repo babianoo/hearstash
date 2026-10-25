@@ -1,9 +1,11 @@
 #include "ui/main_window.h"
 
+#include <exception>
 #include <format>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 // FLTK
 #include <FL/Fl.H>
@@ -12,7 +14,9 @@
 #include <FL/Fl_SVG_Image.H>
 
 #include "core/deepl.h"
+#include "core/recorder.h"
 #include "core/settings.h"
+#include "core/whisper_models.h"
 #include "ui/clipboard.h"
 #include "ui/icons.h"
 #include "ui/search_bar.h"
@@ -24,6 +28,8 @@
 
 // Space around the search bar and results box
 static constexpr int MARGIN = 10;
+// Seconds between checks on a recording
+static constexpr double RECORD_TICK = 0.1;
 
 // Looks of the parts of a Jisho result
 static const Fl_Color DIM = fl_rgb_color(70, 70, 70);
@@ -142,22 +148,109 @@ MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
     win.end();
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow(){
+    Fl::remove_timeout(on_record_tick, this);
+    // The members then go in reverse order: transcription_thread is
+    // stopped and joined before transcriber goes, and recorder stops a
+    // recording still running
+}
 
-// Steps through the states without recording anything, so Record Input
-// can be tried out. Temporary, until recording is connected.
 void MainWindow::on_record(){
-    if (search_bar->record_state() == RecordState::Idle){
-        search_bar->record_state(RecordState::Recording);
+    switch (search_bar->record_state()){
+    case RecordState::Idle: start_recording(); break;
+    case RecordState::Recording: stop_recording(); break;
+    // The "+" button is greyed out meanwhile
+    case RecordState::Transcribing: break;
+    }
+}
+
+void MainWindow::start_recording(){
+    // Checked first, so nobody talks for nothing
+    const WhisperModel* model = find_model(settings.get().speech.whisper_model);
+    if (!model || !is_installed(*model)){
+        // Modal: waits for an answer before returning
+        if (fl_choice("No whisper model is ready to turn speech into text.\n\n"
+                      "Download one and choose it in Settings > Speech-to-Text.",
+                      "Cancel", "Open Settings", nullptr) == 1)
+            settings_window().show_speech_to_text();
         return;
     }
-    // Stopped: pretends to transcribe for a second and a half
+
+    try {
+        if (!recorder) recorder = std::make_unique<Recorder>();
+        recorder->start(settings.get().speech.input_device);
+    } catch (const std::exception& e){
+        fl_alert("%s", e.what());
+        return;
+    }
+
+    search_bar->record_state(RecordState::Recording);
+    Fl::add_timeout(RECORD_TICK, on_record_tick, this);
+}
+
+void MainWindow::on_record_tick(void* data){
+    MainWindow* self = static_cast<MainWindow*>(data);
+    if (self->recorder->full()){
+        self->stop_recording();
+        return;
+    }
+    self->search_bar->record_time(static_cast<int>(self->recorder->seconds()));
+    Fl::repeat_timeout(RECORD_TICK, on_record_tick, data);
+}
+
+void MainWindow::stop_recording(){
+    Fl::remove_timeout(on_record_tick, this);
+    std::vector<float> samples = recorder->stop();
+    if (samples.empty()){
+        search_bar->record_state(RecordState::Idle);
+        return;
+    }
+
+    // As chosen when recording started, so changing it meanwhile doesn't
+    // matter. Points into WHISPER_MODELS, which lives for the whole program.
+    const WhisperModel* model = find_model(settings.get().speech.whisper_model);
+    if (!model){
+        search_bar->record_state(RecordState::Idle);
+        return;
+    }
     search_bar->record_state(RecordState::Transcribing);
-    Fl::add_timeout(1.5, [](void* data){
-        auto* self = static_cast<MainWindow*>(data);
-        self->search_bar->record_state(RecordState::Idle);
-        self->search_bar->set_text("今日はいい天気ですね");
-    }, this);
+
+    // The first time, loading the model alone takes seconds, so not on the
+    // UI thread. The thread has the samples to itself and only hands its
+    // result back through Fl::awake(). The previous one has already ended:
+    // the state was Idle again only after its result came in.
+    transcription_thread = std::jthread([this, model, samples = std::move(samples)](std::stop_token stop){
+        auto* result = new Transcription{.win = this, .text = {}};
+        try {
+            result->text = transcriber.transcribe(*model, samples, "ja", stop);
+        } catch (const TranscriptionCancelled&){
+            // The window is closing: nobody's waiting for the result
+            delete result;
+            return;
+        } catch (const std::exception& e){
+            result->error = e.what();
+        }
+        Fl::awake(on_transcribed, result);
+    });
+}
+
+void MainWindow::on_transcribed(void* data){
+    // unique_ptr so result is deleted when this returns
+    std::unique_ptr<Transcription> result(static_cast<Transcription*>(data));
+    MainWindow* self = result->win;
+    // Its last act was queueing this, so joining takes no time
+    self->transcription_thread.join();
+    self->search_bar->record_state(RecordState::Idle);
+
+    if (!result->error.empty()) fl_alert("Couldn't turn the speech into text:\n\n%s", result->error.c_str());
+    // In the box to check before searching: whisper gets words wrong,
+    // the small models especially
+    else if (!result->text.empty()) self->search_bar->set_text(result->text);
+}
+
+SettingsWindow& MainWindow::settings_window(){
+    if (!settings_win) settings_win = std::make_unique<SettingsWindow>(settings, downloader);
+    return *settings_win;
 }
 
 void MainWindow::show(int argc, char** argv){
@@ -220,9 +313,7 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 }
 
 void MainWindow::on_settings(Fl_Widget*, void* data){
-    MainWindow* self = static_cast<MainWindow*>(data);
-    if (!self->settings_win) self->settings_win = std::make_unique<SettingsWindow>(self->settings, self->downloader);
-    self->settings_win->show();
+    static_cast<MainWindow*>(data)->settings_window().show();
 }
 
 void MainWindow::on_search_done(void* data){

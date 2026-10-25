@@ -104,6 +104,9 @@ std::string Transcriber::transcribe(const WhisperModel& wanted, std::span<const 
     // Only the text is used
     params.no_timestamps = true;
     params.suppress_blank = true;
+    // Tokens that aren't speech, like (音楽) ("music"), which it otherwise
+    // gives for a recording of room noise
+    params.suppress_nst = true;
     params.abort_callback = stop_requested;
     params.abort_callback_user_data = &stop;
 

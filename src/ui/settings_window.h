@@ -41,6 +41,9 @@ public:
     // Opens the window, or raises it if it's already open. It opens on the
     // category that was selected last.
     void show();
+    // The same, on the Speech-to-Text page, e.g. when there's no model to
+    // transcribe with
+    void show_speech_to_text();
 
 private:
     // A whisper model's row on the Speech-to-Text page, left to right

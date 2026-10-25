@@ -56,6 +56,8 @@ public:
     void on_record(std::function<void()> listener){ record_listener = std::move(listener); }
     void record_state(RecordState state);
     RecordState record_state() const { return current_record_state; }
+    // How long it's been recording, shown in the "+" button's tooltip
+    void record_time(int seconds);
     // Puts text in the text box, replacing what's there, with the cursor
     // at its end, e.g. what was said
     void set_text(const std::string& text);
