@@ -1,7 +1,9 @@
 #include "core/transcriber.h"
 
+#include <cstdio>
 #include <format>
 #include <fstream>
+#include <mutex>
 #include <stdexcept>
 
 // whisper.cpp
@@ -27,11 +29,33 @@ static bool model_eof(void* context){
 // The ifstream closes itself when load() returns
 static void close_model(void*){}
 
+// whisper.cpp and ggml log through this instead of straight to stderr.
+// Only warnings and errors get through: loading a model logs about a
+// hundred lines of sizes and settings at INFO.
+static void log_warnings(ggml_log_level level, const char* text, void*){
+    // A CONT message carries on the one before, so it goes where that went.
+    // Per thread, since whichever thread is transcribing logs.
+    thread_local bool shown = false;
+    if (level != GGML_LOG_LEVEL_CONT) shown = level >= GGML_LOG_LEVEL_WARN;
+    if (shown) std::fputs(text, stderr);
+}
+
+// Called while whisper computes, often enough to stop in about half a
+// second. Returning true aborts it.
+static bool stop_requested(void* data){
+    return static_cast<std::stop_token*>(data)->stop_requested();
+}
+
 void Transcriber::ContextDeleter::operator()(whisper_context* ctx) const {
     whisper_free(ctx);
 }
 
-Transcriber::Transcriber() = default;
+Transcriber::Transcriber(){
+    // For the whole program, so once is enough
+    static std::once_flag quiet;
+    std::call_once(quiet, []{ whisper_log_set(log_warnings, nullptr); });
+}
+
 Transcriber::~Transcriber() = default;
 
 void Transcriber::unload(){
@@ -58,8 +82,11 @@ void Transcriber::load(const WhisperModel& new_model){
 }
 
 std::string Transcriber::transcribe(const WhisperModel& wanted, std::span<const float> samples,
-                                    const std::string& language){
+                                    const std::string& language, std::stop_token stop){
+    if (stop.stop_requested()) throw TranscriptionCancelled();
     if (model != &wanted) load(wanted);
+    // Loading has no way to stop partway, so it's checked again after
+    if (stop.stop_requested()) throw TranscriptionCancelled();
     if (samples.empty()) return "";
 
     // Greedy: the best token each step. Beam search is a little more
@@ -77,9 +104,16 @@ std::string Transcriber::transcribe(const WhisperModel& wanted, std::span<const 
     // Only the text is used
     params.no_timestamps = true;
     params.suppress_blank = true;
+    params.abort_callback = stop_requested;
+    params.abort_callback_user_data = &stop;
 
-    if (whisper_full(ctx.get(), params, samples.data(), static_cast<int>(samples.size())) != 0)
+    if (whisper_full(ctx.get(), params, samples.data(), static_cast<int>(samples.size())) != 0){
+        // An abort fails it like an error does, and logs "failed to encode"
+        if (stop.stop_requested()) throw TranscriptionCancelled();
         throw std::runtime_error("whisper.cpp couldn't transcribe the audio");
+    }
+    // It may have finished just as the stop came: the text is kept anyway,
+    // since it's done
 
     std::string text;
     const int segments = whisper_full_n_segments(ctx.get());
