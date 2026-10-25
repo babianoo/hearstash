@@ -80,6 +80,8 @@ private:
     static void on_search_done(void* data);
 
     void move_bar_to_top();
+    // Fills the space under the search bar, which grows with long text
+    void place_results();
     // Replaces what the results area shows, scrolled back to the top.
     // Plain text is in the default TextStyle.
     void show_text(std::string_view text);

@@ -113,6 +113,8 @@ MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
     results_text->color(FL_BACKGROUND_COLOR);
     results->end();
     results->hide();    // Shown by move_bar_to_top() on the first search
+    // Long text makes the bar taller; the results start under it
+    search_bar->on_height_change([this]{ place_results(); });
 
     // Settings button in the top-right corner, as tall as the search bar so
     // it lines up with it once the bar moves to the top.
@@ -146,7 +148,7 @@ void MainWindow::on_search(Fl_Widget*, void* data){
     MainWindow* self = static_cast<MainWindow*>(data);
 
     std::string keyword = self->search_bar->text();
-    if (keyword.find_first_not_of(" \t") == std::string::npos) return;
+    if (keyword.find_first_not_of(" \t\r\n") == std::string::npos) return;
 
     const Api api = self->search_bar->api();
 
@@ -165,6 +167,8 @@ void MainWindow::on_search(Fl_Widget*, void* data){
         }
     }
 
+    // Down to one line, so a long text doesn't take space from the results
+    self->search_bar->collapse();
     self->move_bar_to_top();
 
     if (api == Api::MyMemory){
@@ -214,10 +218,14 @@ void MainWindow::move_bar_to_top(){
 
     // Moving a group moves its children (input, buttons) along with it
     search_bar->position(search_bar->x(), top);
-    const int results_y = top + search_bar->h() + MARGIN;
-    results->resize(results->x(), results_y, results->w(), win.h() - results_y - MARGIN);
+    place_results();
     results->show();
     win.redraw();
+}
+
+void MainWindow::place_results(){
+    const int results_y = search_bar->y() + search_bar->h() + MARGIN;
+    results->resize(results->x(), results_y, results->w(), win.h() - results_y - MARGIN);
 }
 
 void MainWindow::show_result(const SearchResult& result){
