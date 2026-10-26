@@ -64,6 +64,7 @@ endif()
 # Add new source files here, by path from the project root.
 add_executable(prototype
     src/main.cpp
+    src/core/atomic_write.cpp
     src/core/http.cpp
     src/core/deepl.cpp
     src/core/jisho.cpp

@@ -4,9 +4,9 @@
 #include <format>
 #include <fstream>
 #include <iostream>
-#include <stdexcept>
 #include <system_error>
 
+#include "core/atomic_write.h"
 #include "core/whisper_models.h"
 
 // JSON
@@ -55,18 +55,7 @@ Settings load_settings(const fs::path& file){
 void save_settings(const fs::path& file, const Settings& settings){
     json j = settings;
     j["version"] = VERSION;
-
-    fs::create_directories(file.parent_path());
-
-    // Written next to it, then moved over it in one step. A crash while
-    // writing leaves the old file as it was, not half of the new one.
-    fs::path tmp = file;
-    tmp += ".tmp";
-    std::ofstream out(tmp);
-    out << j.dump(4) << '\n';
-    out.close();
-    if (!out) throw std::runtime_error(std::format("Couldn't write {}", tmp.string()));
-    fs::rename(tmp, file);
+    write_file_atomically(file, j.dump(4) + '\n');
 }
 
 void sanitize(Settings& settings){
