@@ -1,6 +1,5 @@
 #include "ui/history_store.h"
 
-#include <chrono>
 #include <exception>
 #include <format>
 #include <iostream>
@@ -9,6 +8,8 @@
 
 // FLTK
 #include <FL/Fl.H>
+
+#include "core/local_time.h"
 
 // Seconds without a change before saving
 static constexpr double SAVE_DELAY = 0.5;
@@ -25,11 +26,10 @@ HistoryStore::~HistoryStore(){
 }
 
 void HistoryStore::add(std::string query, Api api, std::optional<std::string> translation){
-    using namespace std::chrono;
     HistoryEntry entry{
         .query = std::move(query),
         .api = api,
-        .time = duration_cast<seconds>(system_clock::now().time_since_epoch()).count(),
+        .time = unix_now(),
         .translation = {},
     };
     if (api == Api::DeepL && translation && cacheable(*translation)) entry.translation = std::move(translation);
@@ -49,7 +49,20 @@ const std::string* HistoryStore::cached_translation(std::string_view query) cons
     return nullptr;
 }
 
+int HistoryStore::add_listener(std::function<void()> listener){
+    listeners.emplace_back(next_listener_id, std::move(listener));
+    return next_listener_id++;
+}
+
+void HistoryStore::remove_listener(int id){
+    std::erase_if(listeners, [id](const auto& entry){ return entry.first == id; });
+}
+
 void HistoryStore::changed(){
+    // A copy, so a listener can add or remove listeners
+    const auto current = listeners;
+    for (const auto& [id, listener] : current) listener();
+
     unsaved = true;
     // Restarts the wait, so a run of changes is saved once, after the last
     Fl::remove_timeout(on_save_timeout, this);

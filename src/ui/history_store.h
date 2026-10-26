@@ -1,9 +1,11 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "core/api.h"
@@ -42,14 +44,23 @@ public:
     // nullptr if there's none kept. Only valid until the history changes.
     const std::string* cached_translation(std::string_view query) const;
 
+    // listener is called after the entries change, e.g. to show them.
+    // Returns an id for remove_listener. Remove a listener before what it
+    // calls into dies.
+    int add_listener(std::function<void()> listener);
+    void remove_listener(int id);
+
 private:
     std::filesystem::path file;
     std::vector<HistoryEntry> history;
     // Changed since it was last saved
     bool unsaved = false;
 
-    // Saves half a second after the last change, so a run of changes is
-    // saved once
+    std::vector<std::pair<int, std::function<void()>>> listeners;
+    int next_listener_id = 0;
+
+    // Tells the listeners, and saves half a second after the last change,
+    // so a run of changes is saved once
     void changed();
 
     // Static because FLTK callbacks are plain functions; the store comes

@@ -295,7 +295,7 @@ SettingsWindow& MainWindow::settings_window(){
 }
 
 HistoryWindow& MainWindow::history_window(){
-    if (!history_win) history_win = std::make_unique<HistoryWindow>();
+    if (!history_win) history_win = std::make_unique<HistoryWindow>(history);
     return *history_win;
 }
 

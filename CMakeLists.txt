@@ -70,6 +70,7 @@ add_executable(prototype
     src/core/http.cpp
     src/core/deepl.cpp
     src/core/jisho.cpp
+    src/core/local_time.cpp
     src/core/config_dir.cpp
     src/core/recorder.cpp
     src/core/settings.cpp
@@ -80,6 +81,7 @@ add_executable(prototype
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
     src/ui/history_store.cpp
+    src/ui/history_table.cpp
     src/ui/history_window.cpp
     src/ui/main_window.cpp
     src/ui/model_downloader.cpp
