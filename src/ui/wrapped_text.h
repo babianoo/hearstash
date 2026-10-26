@@ -30,6 +30,8 @@ struct TextSpan {
 // The text can be selected by dragging over it, like in a text field.
 // Releasing the mouse copies the selection for middle-click pasting, and
 // Ctrl+C copies it to the clipboard. Ctrl+A selects everything.
+// Right-clicking opens a menu with Copy and Select All; it leaves the
+// selection as it is, so Copy copies what was selected before.
 //
 // Uses selection_color() behind the selected part.
 class WrappedText : public Fl_Widget {
@@ -100,4 +102,10 @@ private:
 
     // Copies the selection: to the middle-click buffer (0) or clipboard (1)
     void copy_selection(int destination) const;
+
+    // Selects all the text and copies it for middle-click pasting
+    void select_all();
+
+    // The right-click menu: Copy and Select All
+    void show_menu();
 };

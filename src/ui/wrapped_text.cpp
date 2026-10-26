@@ -5,6 +5,8 @@
 
 // FLTK
 #include <FL/Fl.H>
+#include <FL/Fl_Input.H>
+#include <FL/Fl_Menu_Item.H>
 #include <FL/Fl_Window.H>
 #include <FL/fl_draw.H>
 #include <FL/fl_utf8.h>
@@ -202,6 +204,27 @@ void WrappedText::copy_selection(int destination) const {
     else Fl::copy(selected.data(), static_cast<int>(selected.size()), 0);
 }
 
+void WrappedText::select_all(){
+    sel_anchor = 0;
+    sel_cursor = full_text.size();
+    copy_selection(0);
+    redraw();
+}
+
+void WrappedText::show_menu(){
+    // The last item stays empty: it ends the menu
+    Fl_Menu_Item menu[3]{};
+    menu[0].label(Fl_Input::copy_menu_text);    // Same label as text fields
+    menu[1].label("Select All");
+    if (sel_anchor == sel_cursor) menu[0].deactivate();
+    if (full_text.empty()) menu[1].deactivate();
+
+    fl_cursor(FL_CURSOR_DEFAULT);
+    const Fl_Menu_Item* chosen = menu->popup(Fl::event_x(), Fl::event_y());
+    if (chosen == &menu[0]) copy_selection(1);
+    else if (chosen == &menu[1]) select_all();
+}
+
 int WrappedText::handle(int event){
     switch (event){
     case FL_ENTER:
@@ -212,6 +235,11 @@ int WrappedText::handle(int event){
         return 1;
 
     case FL_PUSH:
+        if (Fl::event_button() == FL_RIGHT_MOUSE){
+            take_focus();
+            show_menu();
+            return 1;
+        }
         if (Fl::event_button() != FL_LEFT_MOUSE) return 0;
         take_focus();    // So Ctrl+C comes here
         sel_anchor = sel_cursor = offset_at(Fl::event_x(), Fl::event_y());
@@ -239,10 +267,7 @@ int WrappedText::handle(int event){
             return 1;
         }
         if (Fl::event_key() == 'a'){
-            sel_anchor = 0;
-            sel_cursor = full_text.size();
-            copy_selection(0);
-            redraw();
+            select_all();
             return 1;
         }
         return 0;
