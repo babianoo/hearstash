@@ -1,6 +1,7 @@
 #include "ui/filter_bar.h"
 
 #include <algorithm>
+#include <utility>
 
 // FLTK
 #include <FL/Fl.H>
@@ -25,6 +26,29 @@ class FilterInput : public ClipboardInput {
 public:
     FilterInput(int x, int y, int w, int h, const char* placeholder)
         : ClipboardInput(x, y, w, h), placeholder(placeholder){}
+
+    std::function<bool(int key)> key_listener;
+
+    int handle(int event) override {
+        if (event == FL_KEYBOARD){
+            switch (const int key = Fl::event_key()){
+            case FL_Up:
+            case FL_Down:
+            case FL_Page_Up:
+            case FL_Page_Down:
+            case FL_Enter:
+            case FL_KP_Enter:
+                if (key_listener && key_listener(key)) return 1;
+                break;
+            case FL_Escape:
+                if (size() == 0) break;
+                value("");
+                do_callback();
+                return 1;
+            }
+        }
+        return ClipboardInput::handle(event);
+    }
 
     void draw() override {
         ClipboardInput::draw();
@@ -63,6 +87,10 @@ FilterBar::FilterBar(int x, int y, int w, const char* placeholder) : Fl_Group(x,
 
 std::string FilterBar::text() const {
     return input->value();
+}
+
+void FilterBar::on_key(std::function<bool(int key)> listener){
+    input->key_listener = std::move(listener);
 }
 
 void FilterBar::resize(int x, int y, int w, int h){

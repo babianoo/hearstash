@@ -12,10 +12,13 @@
 // FLTK
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
+#include <FL/Fl_Input.H>
+#include <FL/Fl_Menu_Item.H>
 #include <FL/fl_utf8.h>
 
 #include "core/api.h"
 #include "core/local_time.h"
+#include "ui/clipboard.h"
 #include "ui/smooth_scroll.h"
 #include "ui/theme.h"
 
@@ -115,6 +118,8 @@ public:
     // entries: the old ones may already be gone
     std::optional<std::pair<std::string, Api>> selected_key;
     std::function<void()> select_listener;
+    std::function<void(const std::string& query, Api api)> activate_listener;
+    std::function<void(const std::string& query, Api api)> delete_listener;
 
     // Row at window y, or -1 if there's none there
     int row_at(int y) const {
@@ -123,12 +128,42 @@ public:
         return row < static_cast<int>(entries.size()) ? row : -1;
     }
 
+    // Clamped to the rows there are, and scrolled into view. Does nothing
+    // without rows.
     void select(int row){
+        if (entries.empty()) return;
+        row = std::clamp(row, 0, static_cast<int>(entries.size()) - 1);
+        // The scroll this is in
+        static_cast<SmoothScroll*>(parent())->scroll_into_view(row * ROW_H, ROW_H);
         if (row == selected) return;
         selected = row;
         selected_key.emplace(entries[row]->query, entries[row]->api);
         redraw();
         if (select_listener) select_listener();
+    }
+
+    // Up, Down, Page Up, Page Down, Home and End move the selection,
+    // Enter makes the selected search again and Delete deletes it. Returns
+    // whether it took key.
+    bool key(int key){
+        if (entries.empty()) return false;
+        // Rows that fit in the scroll, less one, so the page keeps one
+        // row of the last in view
+        const int page = std::max(1, parent()->h() / ROW_H - 1);
+        // With none selected, any of them starts at the first row
+        const int from = selected;
+        switch (key){
+        case FL_Up: select(from < 0 ? 0 : from - 1); return true;
+        case FL_Down: select(from + 1); return true;
+        case FL_Page_Up: select(from < 0 ? 0 : from - page); return true;
+        case FL_Page_Down: select(from < 0 ? 0 : from + page); return true;
+        case FL_Home: select(0); return true;
+        case FL_End: select(static_cast<int>(entries.size()) - 1); return true;
+        case FL_Enter:
+        case FL_KP_Enter: return tell(activate_listener);
+        case FL_Delete: return tell(delete_listener);
+        }
+        return false;
     }
 
     int handle(int event) override {
@@ -140,10 +175,28 @@ public:
         case FL_LEAVE:
             set_hovered(-1);
             return 1;
-        case FL_PUSH:
-            if (Fl::event_button() != FL_LEFT_MOUSE) break;
-            if (const int row = row_at(Fl::event_y()); row >= 0) select(row);
+
+        case FL_PUSH: {
+            const int button = Fl::event_button();
+            if (button != FL_LEFT_MOUSE && button != FL_RIGHT_MOUSE) break;
+            take_focus();    // For the keys
+            const int row = row_at(Fl::event_y());
+            if (row < 0) return 1;
+            // A double-click's second click is on the row its first one
+            // selected
+            const bool again = button == FL_LEFT_MOUSE && Fl::event_clicks() > 0 && row == selected;
+            select(row);
+            if (again) tell(activate_listener);
+            else if (button == FL_RIGHT_MOUSE) show_menu();
             return 1;
+        }
+
+        case FL_FOCUS:
+        case FL_UNFOCUS:
+            return 1;    // Accepts keyboard focus
+        case FL_KEYBOARD:
+            if (Fl::event_state(FL_COMMAND) && Fl::event_key() == 'c') return copy();
+            return key(Fl::event_key()) ? 1 : 0;
         }
         return Fl_Widget::handle(event);
     }
@@ -168,6 +221,38 @@ public:
     }
 
 private:
+    // Calls listener with the selected search. Copied first: making it
+    // again or deleting it changes the history, and with it entries.
+    bool tell(const std::function<void(const std::string&, Api)>& listener) const {
+        if (selected < 0 || !listener) return false;
+        const std::string query = entries[selected]->query;
+        listener(query, entries[selected]->api);
+        return true;
+    }
+
+    // Copies the selected search, all of it, to the clipboard
+    bool copy() const {
+        if (selected < 0) return false;
+        clipboard_copy(entries[selected]->query);
+        return true;
+    }
+
+    // Search Again, Copy and Delete, for the selected search
+    void show_menu(){
+        // The last item stays empty: it ends the menu
+        Fl_Menu_Item menu[4]{};
+        menu[0].label("Search Again");
+        menu[1].label(Fl_Input::copy_menu_text);    // Same label as text fields
+        menu[1].flags = FL_MENU_DIVIDER;
+        menu[2].label("Delete");
+
+        fl_cursor(FL_CURSOR_DEFAULT);
+        const Fl_Menu_Item* chosen = menu->popup(Fl::event_x(), Fl::event_y());
+        if (chosen == &menu[0]) tell(activate_listener);
+        else if (chosen == &menu[1]) copy();
+        else if (chosen == &menu[2]) tell(delete_listener);
+    }
+
     void set_hovered(int row){
         if (row == hovered) return;
         hovered = row;
@@ -268,6 +353,26 @@ const HistoryEntry* HistoryTable::selected() const {
 
 void HistoryTable::on_select(std::function<void()> listener){
     rows->select_listener = std::move(listener);
+}
+
+void HistoryTable::on_activate(std::function<void(const std::string& query, Api api)> listener){
+    rows->activate_listener = std::move(listener);
+}
+
+void HistoryTable::on_delete(std::function<void(const std::string& query, Api api)> listener){
+    rows->delete_listener = std::move(listener);
+}
+
+void HistoryTable::select(int row){
+    rows->select(row);
+}
+
+int HistoryTable::selected_row() const {
+    return rows->selected;
+}
+
+bool HistoryTable::handle_key(int key){
+    return rows->key(key);
 }
 
 void HistoryTable::draw(){

@@ -35,6 +35,9 @@ public:
 
     std::string text() const;
     Api api() const { return current_api; }
+    // Picks api in the "+" menu, e.g. to search again with the API used
+    // before
+    void set_api(Api api);
 
     // Shrinks the bar to the text's first line, e.g. once a search starts,
     // so the results get the space. Clicking or editing the text shows all

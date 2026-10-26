@@ -130,6 +130,11 @@ private:
     // UNLOAD_AFTER since the last transcription: frees the model
     static void on_unload_timeout(void* data);
 
+    // Searches for what's in the search bar, with its API
+    void search();
+    // Puts query and api in the search bar, searches, and brings the
+    // window to the front. For a search picked in the history window.
+    void search_again(const std::string& query, Api api);
     // Record Input was picked, or the red "+" clicked to stop
     void on_record();
     // Starts recording, and loading the model meanwhile

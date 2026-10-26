@@ -391,6 +391,13 @@ void SearchBar::set_text(const std::string& text){
     input->show_insert_position();
 }
 
+void SearchBar::set_api(Api api){
+    current_api = api;
+    // Otherwise the tooltip is about recording, and shows the API again
+    // once that's done
+    if (current_record_state == RecordState::Idle) api_btn->tooltip(API_NAMES[static_cast<int>(api)]);
+}
+
 void SearchBar::on_input_hover(std::function<void(bool hovered)> listener){
     input->hover_listener = std::move(listener);
 }

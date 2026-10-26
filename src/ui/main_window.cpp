@@ -295,7 +295,9 @@ SettingsWindow& MainWindow::settings_window(){
 }
 
 HistoryWindow& MainWindow::history_window(){
-    if (!history_win) history_win = std::make_unique<HistoryWindow>(history);
+    if (!history_win) history_win = std::make_unique<HistoryWindow>(history, [this](const std::string& query, Api api){
+            search_again(query, api);
+        });
     return *history_win;
 }
 
@@ -305,27 +307,38 @@ void MainWindow::show(int argc, char** argv){
 }
 
 void MainWindow::on_search(Fl_Widget*, void* data){
-    MainWindow* self = static_cast<MainWindow*>(data);
+    static_cast<MainWindow*>(data)->search();
+}
 
+void MainWindow::search_again(const std::string& query, Api api){
+    search_bar->set_text(query);
+    search_bar->set_api(api);
+    search();
+    // In front of the history window, so the result can be seen. Wayland
+    // doesn't let an app raise its own window, so there it stays behind.
+    win.show();
+}
+
+void MainWindow::search(){
     // Without the spaces and line breaks around it, so "兄弟 " and "兄弟"
     // are one search in the history
-    std::string keyword = self->search_bar->text();
+    std::string keyword = search_bar->text();
     keyword.erase(keyword.find_last_not_of(" \t\r\n") + 1);
     keyword.erase(0, keyword.find_first_not_of(" \t\r\n"));
     if (keyword.empty()) return;
 
-    const Api api = self->search_bar->api();
+    const Api api = search_bar->api();
 
     // Translated before: shown from the history, without asking DeepL,
     // so it doesn't use up the monthly quota. Works without a key too.
-    const std::string* cached = api == Api::DeepL ? self->history.cached_translation(keyword) : nullptr;
+    const std::string* cached = api == Api::DeepL ? history.cached_translation(keyword) : nullptr;
 
     // Checked before anything changes on screen: without a key there's no
     // search at all. Copied for the search thread, since the settings may
     // change while it runs.
     std::string deepl_key;
     if (api == Api::DeepL && !cached){
-        deepl_key = effective_deepl_key(self->settings.get());
+        deepl_key = effective_deepl_key(settings.get());
         if (deepl_key.empty()){
             // Modal: waits for OK before returning
             fl_alert("No DeepL API key found.\n\n"
@@ -336,31 +349,31 @@ void MainWindow::on_search(Fl_Widget*, void* data){
     }
 
     // Down to one line, so a long text doesn't take space from the results
-    self->search_bar->collapse();
-    self->move_bar_to_top();
+    search_bar->collapse();
+    move_bar_to_top();
 
     if (api == Api::MyMemory){
-        self->show_text("MyMemory isn't connected yet.");
+        show_text("MyMemory isn't connected yet.");
         return;
     }
 
-    const unsigned id = ++self->latest_search;
+    const unsigned id = ++latest_search;
 
     if (cached){
         // Copied: adding the search to the history replaces the entry
         // cached points into
-        self->show_result({.win = self, .id = id, .keyword = keyword, .api = api, .translation = *cached});
+        show_result({.win = this, .id = id, .keyword = keyword, .api = api, .translation = *cached});
         return;
     }
 
     // Not the keyword itself: a long paragraph would fill the results area
-    self->show_text(api == Api::DeepL ? "Translating..." : "Searching...");
+    show_text(api == Api::DeepL ? "Translating..." : "Searching...");
 
     // The request can take seconds, and FLTK only redraws between
     // callbacks, so doing it here would freeze the window. The thread gets
     // copies of what it needs; it never touches a widget itself.
-    std::thread([self, id, api, keyword = std::move(keyword), deepl_key = std::move(deepl_key)]{
-        auto* result = new SearchResult{.win = self, .id = id, .keyword = keyword, .api = api};
+    std::thread([this, id, api, keyword = std::move(keyword), deepl_key = std::move(deepl_key)]{
+        auto* result = new SearchResult{.win = this, .id = id, .keyword = keyword, .api = api};
         try {
             if (api == Api::DeepL) result->translation = deepl_translate(keyword, deepl_key);
             else result->entries = jisho_search(keyword);

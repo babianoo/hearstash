@@ -5,6 +5,7 @@
 #include <format>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // FLTK
@@ -60,7 +61,8 @@ static bool matches(const HistoryEntry& entry, std::string_view filter){
         || (entry.translation && contains(*entry.translation, filter));
 }
 
-HistoryWindow::HistoryWindow(HistoryStore& history) : history(history){
+HistoryWindow::HistoryWindow(HistoryStore& history, std::function<void(const std::string& query, Api api)> search)
+    : history(history), search(std::move(search)){
     // win is the current group here, like in MainWindow
 
     // Its own group so the radio buttons only deselect each other. The
@@ -80,9 +82,17 @@ HistoryWindow::HistoryWindow(HistoryStore& history) : history(history){
     // These are placed by layout()
     filter = new FilterBar(0, 0, FILTER_W, "Search history");
     filter->callback(on_filter, this);
+    filter->on_key([this](int key){ return table->handle_key(key); });
 
     table = new HistoryTable(0, 0, win.w(), win.h());
     table->on_select([this]{ show_details(); });
+    table->on_activate([this](const std::string& query, Api api){ this->search(query, api); });
+    table->on_delete([this](const std::string& query, Api api){
+        const int row = table->selected_row();
+        this->history.remove(query, api);
+        // The one that took its place, so Delete can be pressed again
+        table->select(row);
+    });
 
     details = new SmoothScroll(0, 0, win.w(), DETAILS_H);
     // Inside the box's border

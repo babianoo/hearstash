@@ -24,6 +24,11 @@ public:
     // Jumps to the top, e.g. when new content is shown
     void scroll_to_top();
 
+    // Scrolls as little as needed to show the part of the content that's
+    // height tall, top pixels from its top. E.g. a row picked with the
+    // arrow keys. Jumps rather than glides, like text fields do.
+    void scroll_into_view(int top, int height);
+
     // Width a child can use without ending up under the scrollbar
     int content_w() const;
 

@@ -40,6 +40,9 @@ public:
     // translation is DeepL's, which is kept if it's cacheable().
     void add(std::string query, Api api, std::optional<std::string> translation = {});
 
+    // Deletes the search for query with api, if there's one
+    void remove(std::string_view query, Api api);
+
     // DeepL's translation of exactly query from an earlier search, or
     // nullptr if there's none kept. Only valid until the history changes.
     const std::string* cached_translation(std::string_view query) const;

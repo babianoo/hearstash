@@ -43,6 +43,10 @@ void HistoryStore::add(std::string query, Api api, std::optional<std::string> tr
     changed();
 }
 
+void HistoryStore::remove(std::string_view query, Api api){
+    if (std::erase_if(history, [&](const HistoryEntry& e){ return e.query == query && e.api == api; }) > 0) changed();
+}
+
 const std::string* HistoryStore::cached_translation(std::string_view query) const {
     for (const HistoryEntry& entry : history)
         if (entry.api == Api::DeepL && entry.query == query) return entry.translation ? &*entry.translation : nullptr;

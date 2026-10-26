@@ -96,6 +96,17 @@ void SmoothScroll::scroll_to_top(){
     scroll_to(0, 0);
 }
 
+void SmoothScroll::scroll_into_view(int top, int height){
+    const int visible_h = h() - Fl::box_dh(box());
+    int to = yposition();
+    if (top < to) to = top;
+    else if (top + height > to + visible_h) to = top + height - visible_h;
+    else return;
+
+    stop_glide();
+    scroll_to(xposition(), std::clamp(to, 0, max_y()));
+}
+
 int SmoothScroll::content_w() const {
     return w() - Fl::box_dw(box()) - BAR_W;
 }

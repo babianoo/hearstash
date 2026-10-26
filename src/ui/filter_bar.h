@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 
 // FLTK
@@ -16,13 +17,20 @@ class FilterInput;
 // always one line: line breaks that are pasted in become spaces.
 //
 // Its callback runs on every change to the text, so what it filters can
-// follow as it's typed.
+// follow as it's typed. Escape clears the text, or does what it would
+// anyway (closing the window) when there's none.
 class FilterBar : public Fl_Group {
 public:
     // placeholder isn't copied, so it has to stay valid
     FilterBar(int x, int y, int w, const char* placeholder);
 
     std::string text() const;
+
+    // listener gets Up, Down, Page Up, Page Down and Enter while the text
+    // box has focus, e.g. to move through a list of what's filtered
+    // without leaving the box. It returns whether it took the key; if not,
+    // the text box gets it.
+    void on_key(std::function<bool(int key)> listener);
 
     // Keeps the magnifying glass its size. Fl_Group's own resize() would
     // stretch it.

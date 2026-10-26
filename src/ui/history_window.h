@@ -1,11 +1,14 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <optional>
+#include <string>
 
 // FLTK
 #include <FL/Fl_Double_Window.H>
 
+#include "core/api.h"
 #include "core/time_ranges.h"
 
 // Only pointers and references to these are stored here, so the full
@@ -25,10 +28,16 @@ class Fl_Widget;
 // their text, the searches in a table, newest first, and under it the
 // selected one in full, with its DeepL translation if there's one kept.
 // It follows the history as it changes, open or not.
+//
+// A search in the table can be made again, or deleted (see HistoryTable).
+// The arrow keys, Page Up, Page Down and Enter work on the table from the
+// filter box too, so a search can be found and made again from the
+// keyboard alone.
 class HistoryWindow {
 public:
-    // history has to outlive the window
-    explicit HistoryWindow(HistoryStore& history);
+    // history has to outlive the window. search is called to make a search
+    // again, e.g. on a double-click.
+    HistoryWindow(HistoryStore& history, std::function<void(const std::string& query, Api api)> search);
     // Stops listening to history
     ~HistoryWindow();
 
@@ -41,6 +50,7 @@ public:
 
 private:
     HistoryStore& history;
+    std::function<void(const std::string& query, Api api)> search;
     // From history.add_listener
     int history_listener = -1;
 
