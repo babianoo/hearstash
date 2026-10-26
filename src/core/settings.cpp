@@ -1,12 +1,10 @@
 #include "core/settings.h"
 
 #include <cstdlib>
-#include <format>
 #include <fstream>
-#include <iostream>
-#include <system_error>
 
 #include "core/atomic_write.h"
+#include "core/bad_file.h"
 #include "core/whisper_models.h"
 
 // JSON
@@ -38,16 +36,9 @@ Settings load_settings(const fs::path& file){
         return settings;
     } catch (const json::exception& e){
         // Not JSON, or a value of the wrong type, which fails the whole
-        // file. Closed first: Windows can't rename an open file.
+        // file
         in.close();
-        fs::path bad = file;
-        bad += ".bad";
-        // Not worth failing over: the defaults are used either way
-        std::error_code ec;
-        fs::rename(file, bad, ec);
-        std::cerr << std::format("Couldn't read {}, so the settings start from the defaults: {}\n",
-                                 file.string(), e.what());
-        if (!ec) std::cerr << std::format("It was renamed to {}.\n", bad.string());
+        set_aside_bad_file(file, e.what(), "the settings start from the defaults");
         return {};
     }
 }
