@@ -344,6 +344,8 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 }
 
 void MainWindow::on_close(Fl_Widget*, void*){
+    // FLTK calls it for Escape too, which shouldn't quit the app
+    if (Fl::event() == FL_SHORTCUT && Fl::event_key() == FL_Escape) return;
     // Settings too: Fl::run() only returns once no window is shown, and
     // until then a recording would go on with nothing on screen. The
     // destructors then stop it, and cancel any download.

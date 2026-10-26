@@ -107,7 +107,7 @@ private:
     // comes in through data.
     static void on_search(Fl_Widget* w, void* data);
     static void on_settings(Fl_Widget* w, void* data);
-    // The window's close button: quits the app
+    // The window's close button: quits the app. Escape does nothing.
     static void on_close(Fl_Widget* w, void* data);
     // Runs on the UI thread, called by Fl::awake() from a search thread
     static void on_search_done(void* data);
