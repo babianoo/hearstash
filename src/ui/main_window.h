@@ -12,11 +12,13 @@
 // FLTK
 #include <FL/Fl_Double_Window.H>
 
+#include "core/api.h"
 #include "core/jisho.h"
 #include "core/transcriber.h"
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in main_window.cpp instead.
+class HistoryStore;
 class ModelDownloader;
 class Recorder;
 class SearchBar;
@@ -29,8 +31,8 @@ struct TextSpan;
 
 class MainWindow {
 public:
-    // settings and downloader have to outlive the window
-    MainWindow(SettingsStore& settings, ModelDownloader& downloader);
+    // settings, history and downloader have to outlive the window
+    MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader);
     // Defined in main_window.cpp, where SettingsWindow and Recorder are
     // complete types, which unique_ptr needs to delete them. Stops a
     // transcription still running and waits for it, or for the model to
@@ -49,6 +51,7 @@ private:
         MainWindow* win;
         unsigned id;
         std::string keyword;
+        Api api;
         std::vector<JishoEntry> entries{};          // Jisho
         std::optional<std::string> translation{};   // DeepL
         std::string error{};    // Non-empty if the search failed
@@ -75,6 +78,8 @@ private:
 
     // Changed by settings_win, read when searching
     SettingsStore& settings;
+    // What was searched. Searches are added as their results come in.
+    HistoryStore& history;
     // Only passed on to settings_win
     ModelDownloader& downloader;
     // Created on the first click of the settings button. Not a plain

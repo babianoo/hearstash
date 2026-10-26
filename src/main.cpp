@@ -4,6 +4,7 @@
 #include "core/config_dir.h"
 #include "core/http.h"
 #include "ui/theme.h"
+#include "ui/history_store.h"
 #include "ui/main_window.h"
 #include "ui/model_downloader.h"
 #include "ui/settings_store.h"
@@ -25,8 +26,10 @@ int main(int argc, char** argv){
     // download keeps going while the settings window is closed. Quitting
     // cancels the downloads still running.
     ModelDownloader downloader;
+    // The same goes for it
+    HistoryStore history(state_dir() / "history.json");
 
-    MainWindow main_win(settings, downloader);
+    MainWindow main_win(settings, history, downloader);
     main_win.show(argc, argv);
 
     return Fl::run();

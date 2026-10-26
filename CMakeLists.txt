@@ -79,6 +79,7 @@ add_executable(prototype
     src/ui/category_button.cpp
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
+    src/ui/history_store.cpp
     src/ui/main_window.cpp
     src/ui/model_downloader.cpp
     src/ui/search_bar.cpp

@@ -19,6 +19,7 @@
 #include "core/settings.h"
 #include "core/whisper_models.h"
 #include "ui/clipboard.h"
+#include "ui/history_store.h"
 #include "ui/icons.h"
 #include "ui/search_bar.h"
 #include "ui/settings_store.h"
@@ -98,8 +99,8 @@ static std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entri
     return spans;
 }
 
-MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
-    : settings(settings), downloader(downloader){
+MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader)
+    : settings(settings), history(history), downloader(downloader){
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
 
@@ -291,16 +292,24 @@ void MainWindow::show(int argc, char** argv){
 void MainWindow::on_search(Fl_Widget*, void* data){
     MainWindow* self = static_cast<MainWindow*>(data);
 
+    // Without the spaces and line breaks around it, so "兄弟 " and "兄弟"
+    // are one search in the history
     std::string keyword = self->search_bar->text();
-    if (keyword.find_first_not_of(" \t\r\n") == std::string::npos) return;
+    keyword.erase(keyword.find_last_not_of(" \t\r\n") + 1);
+    keyword.erase(0, keyword.find_first_not_of(" \t\r\n"));
+    if (keyword.empty()) return;
 
     const Api api = self->search_bar->api();
+
+    // Translated before: shown from the history, without asking DeepL,
+    // so it doesn't use up the monthly quota. Works without a key too.
+    const std::string* cached = api == Api::DeepL ? self->history.cached_translation(keyword) : nullptr;
 
     // Checked before anything changes on screen: without a key there's no
     // search at all. Copied for the search thread, since the settings may
     // change while it runs.
     std::string deepl_key;
-    if (api == Api::DeepL){
+    if (api == Api::DeepL && !cached){
         deepl_key = effective_deepl_key(self->settings.get());
         if (deepl_key.empty()){
             // Modal: waits for OK before returning
@@ -320,15 +329,23 @@ void MainWindow::on_search(Fl_Widget*, void* data){
         return;
     }
 
+    const unsigned id = ++self->latest_search;
+
+    if (cached){
+        // Copied: adding the search to the history replaces the entry
+        // cached points into
+        self->show_result({.win = self, .id = id, .keyword = keyword, .api = api, .translation = *cached});
+        return;
+    }
+
     // Not the keyword itself: a long paragraph would fill the results area
     self->show_text(api == Api::DeepL ? "Translating..." : "Searching...");
-    const unsigned id = ++self->latest_search;
 
     // The request can take seconds, and FLTK only redraws between
     // callbacks, so doing it here would freeze the window. The thread gets
     // copies of what it needs; it never touches a widget itself.
     std::thread([self, id, api, keyword = std::move(keyword), deepl_key = std::move(deepl_key)]{
-        auto* result = new SearchResult{.win = self, .id = id, .keyword = keyword};
+        auto* result = new SearchResult{.win = self, .id = id, .keyword = keyword, .api = api};
         try {
             if (api == Api::DeepL) result->translation = deepl_translate(keyword, deepl_key);
             else result->entries = jisho_search(keyword);
@@ -383,14 +400,19 @@ void MainWindow::show_result(const SearchResult& result){
     // A newer search started since this one; its result will come later
     if (result.id != latest_search) return;
 
-    if (!result.error.empty())
+    if (!result.error.empty()){
         show_text(std::format("Search failed: {}", result.error));
-    else if (result.translation)
+    } else if (result.translation){
         show_text(*result.translation);
-    else if (result.entries.empty())
+        history.add(result.keyword, result.api, result.translation);
+    } else if (result.entries.empty()){
+        // Not in the history: most likely a typo, and nothing to look at
+        // again
         show_text(std::format("No results for {}.", result.keyword));
-    else
+    } else {
         show_text(format_entries(result.entries));
+        history.add(result.keyword, result.api);
+    }
 }
 
 void MainWindow::show_text(std::string_view text){
