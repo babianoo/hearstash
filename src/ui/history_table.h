@@ -27,7 +27,8 @@ public:
 
     // Shows these entries, top to bottom. They must stay valid until the
     // next call. The selected search stays selected if it's among them.
-    void entries(std::vector<const HistoryEntry*> entries);
+    // Without any, empty_note is shown in their place; it isn't copied.
+    void entries(std::vector<const HistoryEntry*> entries, const char* empty_note);
 
     // nullptr when none is
     const HistoryEntry* selected() const;
@@ -35,6 +36,13 @@ public:
     // listener is called after the selection changes: by a click, or
     // because the selected search is no longer shown
     void on_select(std::function<void()> listener);
+
+    // Jumps to the first row, e.g. when other searches are shown
+    void scroll_to_top();
+
+    // Keeps the header its height and the rows theirs, as wide as the
+    // table. Fl_Group's own resize() would stretch both.
+    void resize(int x, int y, int w, int h) override;
 
 protected:
     void draw() override;
@@ -44,4 +52,10 @@ private:
     // deletes them when it dies. rows is scroll's only child.
     SmoothScroll* scroll = nullptr;
     HistoryRows* rows = nullptr;
+
+    // Places the scroll under the header, inside the border
+    void place_scroll();
+    // Makes the rows as wide as the scroll's content, and tall enough for
+    // all of them, or the scroll if that's taller
+    void fit_rows();
 };

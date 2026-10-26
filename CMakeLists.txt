@@ -75,11 +75,13 @@ add_executable(prototype
     src/core/recorder.cpp
     src/core/settings.cpp
     src/core/sha1.cpp
+    src/core/time_ranges.cpp
     src/core/transcriber.cpp
     src/core/whisper_models.cpp
     src/ui/category_button.cpp
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
+    src/ui/filter_bar.cpp
     src/ui/history_store.cpp
     src/ui/history_table.cpp
     src/ui/history_window.cpp

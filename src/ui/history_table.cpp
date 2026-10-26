@@ -94,7 +94,7 @@ static void draw_badge(Api api, int x, int y){
 }
 
 // The rows: one per entry, at least as tall as the scroll it's in, so the
-// "No searches yet" note can sit in its middle. Only draws the rows in
+// note shown without any can sit in its middle. Only draws the rows in
 // view, so a long history costs no more than a short one.
 class HistoryRows : public Fl_Widget {
 public:
@@ -106,6 +106,8 @@ public:
     }
 
     std::vector<const HistoryEntry*> entries;
+    // Shown when there are no entries
+    const char* empty_note = "";
     // Indexes into entries, -1 for none
     int selected = -1;
     int hovered = -1;
@@ -151,7 +153,7 @@ public:
         if (entries.empty()){
             fl_font(FL_HELVETICA_ITALIC, FL_NORMAL_SIZE);
             fl_color(DIM);
-            fl_draw("No searches yet", x(), y(), w(), h(), FL_ALIGN_CENTER);
+            fl_draw(empty_note, x(), y(), w(), h(), FL_ALIGN_CENTER);
             return;
         }
 
@@ -202,19 +204,46 @@ HistoryTable::HistoryTable(int x, int y, int w, int h) : Fl_Group(x, y, w, h){
     box(FL_DOWN_BOX);
     color(FL_BACKGROUND2_COLOR);
 
-    const int inner_x = x + Fl::box_dx(box()), inner_y = y + Fl::box_dy(box());
-    const int inner_w = w - Fl::box_dw(box()), inner_h = h - Fl::box_dh(box());
-    scroll = new SmoothScroll(inner_x, inner_y + HEADER_H, inner_w, inner_h - HEADER_H);
+    // Placed by place_scroll() and fit_rows()
+    scroll = new SmoothScroll(x, y, w, h);
     // No border of its own: it's inside this one
     scroll->box(FL_FLAT_BOX);
     scroll->color(FL_BACKGROUND2_COLOR);
-    // Stops before the scrollbar
-    rows = new HistoryRows(inner_x, inner_y + HEADER_H, scroll->content_w(), scroll->h());
+    rows = new HistoryRows(x, y, w, h);
     scroll->end();
     end();
+
+    // Moves the rows along with the scroll
+    place_scroll();
+    fit_rows();
 }
 
-void HistoryTable::entries(std::vector<const HistoryEntry*> entries){
+void HistoryTable::resize(int x, int y, int w, int h){
+    Fl_Widget::resize(x, y, w, h);
+    // Moves the rows along with it, scrolled as they were
+    place_scroll();
+    fit_rows();
+}
+
+void HistoryTable::place_scroll(){
+    const int inner_y = y() + Fl::box_dy(box());
+    scroll->resize(x() + Fl::box_dx(box()), inner_y + HEADER_H, w() - Fl::box_dw(box()),
+                   h() - Fl::box_dh(box()) - HEADER_H);
+}
+
+void HistoryTable::fit_rows(){
+    // Stops before the scrollbar
+    rows->size(scroll->content_w(), std::max(static_cast<int>(rows->entries.size()) * ROW_H, scroll->h()));
+    // Its scrollbar depends on the rows' height
+    scroll->redraw();
+}
+
+void HistoryTable::scroll_to_top(){
+    scroll->scroll_to_top();
+}
+
+void HistoryTable::entries(std::vector<const HistoryEntry*> entries, const char* empty_note){
+    rows->empty_note = empty_note;
     int selected = -1;
     if (rows->selected_key){
         const auto& [query, api] = *rows->selected_key;
@@ -228,9 +257,7 @@ void HistoryTable::entries(std::vector<const HistoryEntry*> entries){
     if (selected < 0) rows->selected_key.reset();
     // Found again on the next mouse move: it may be another row now
     rows->hovered = -1;
-    rows->size(rows->w(), std::max(static_cast<int>(rows->entries.size()) * ROW_H, scroll->h()));
-    // Its scrollbar depends on the new height
-    scroll->redraw();
+    fit_rows();
 
     if (lost && rows->select_listener) rows->select_listener();
 }

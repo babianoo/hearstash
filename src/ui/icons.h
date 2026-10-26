@@ -35,6 +35,14 @@ inline constexpr const char* ICON_HISTORY =
     "<path d='M8.8 5v3.2l2.2 1.4'/>"
     "</svg>";
 
+// Magnifying glass: in front of a box whose text searches or filters
+inline constexpr const char* ICON_SEARCH =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' "
+    "stroke='#444' stroke-width='1.4' stroke-linecap='round'>"
+    "<circle cx='6.8' cy='6.8' r='4.3'/>"
+    "<path d='M10.1 10.1 14 14'/>"
+    "</svg>";
+
 // Eye: almond outline with a round pupil. Shown while the text is hidden;
 // clicking it shows the text.
 inline constexpr const char* ICON_SHOW =

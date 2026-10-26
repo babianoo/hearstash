@@ -52,15 +52,10 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, ModelDownloader& downloa
     : settings(settings), downloader(downloader){
     // win is the current group here, like in MainWindow
 
-    // A bit darker than the pages, so it stands apart from them. Computed
-    // here, not as a constant: the background color can still change
-    // (e.g. with -bg) before the first window is created.
-    const Fl_Color sidebar_color = fl_color_average(FL_BACKGROUND_COLOR, FL_BLACK, 0.92f);
-
     // Its own group so the radio buttons only deselect each other
     Fl_Group* sidebar = new Fl_Group(0, 0, SIDEBAR_W, win.h());
     sidebar->box(FL_FLAT_BOX);
-    sidebar->color(sidebar_color);
+    sidebar->color(sidebar_color());
     for (size_t i = 0; i < std::size(CATEGORY_NAMES); ++i){
         const int y = MARGIN + static_cast<int>(i) * CATEGORY_H;
         Fl_Button* category = new CategoryButton(0, y, SIDEBAR_W, CATEGORY_H, CATEGORY_NAMES[i], MARGIN);
