@@ -12,13 +12,13 @@
 #include <FL/Fl_Button.H>
 #include <FL/Fl_Choice.H>
 #include <FL/Fl_Group.H>
-#include <FL/fl_draw.H>
 #include <FL/Fl_Progress.H>
 #include <FL/Fl_Round_Button.H>
 #include <FL/Fl_SVG_Image.H>
 
 #include "core/recorder.h"
 #include "core/whisper_models.h"
+#include "ui/category_button.h"
 #include "ui/clipboard_input.h"
 #include "ui/icons.h"
 #include "ui/model_downloader.h"
@@ -35,8 +35,6 @@ static constexpr int CATEGORY_H = 36;
 // Space around the sidebar's list and a page's contents
 static constexpr int MARGIN = 20;
 
-static const Fl_Color DIM = fl_rgb_color(70, 70, 70);
-static const Fl_Color ACCENT = fl_rgb_color(50, 110, 240);
 static const Fl_Color ERROR_COLOR = fl_rgb_color(200, 40, 40);
 
 // A row on the Speech-to-Text page, and its button
@@ -49,32 +47,6 @@ static constexpr int MODEL_STATUS_W = 110;
 static size_t index_of(const WhisperModel& model){
     return static_cast<size_t>(&model - WHISPER_MODELS.data());
 }
-
-// An entry in the sidebar: plain text, no button look. The selected one is
-// bold, with an accent bar along its right edge.
-//
-// A radio button, so selecting one deselects the others in its group. Its
-// callback only runs when the selection changes: clicking the one that's
-// already selected does nothing.
-class CategoryButton : public Fl_Button {
-public:
-    CategoryButton(int x, int y, int w, int h, const char* label) : Fl_Button(x, y, w, h, label){
-        type(FL_RADIO_BUTTON);
-        clear_visible_focus();    // No dotted focus ring after a click
-    }
-
-    void draw() override {
-        // The sidebar's color, so it looks like part of it
-        draw_box(FL_FLAT_BOX, parent()->color());
-        fl_font(value() ? FL_HELVETICA_BOLD : FL_HELVETICA, labelsize());
-        fl_color(value() ? FL_FOREGROUND_COLOR : DIM);
-        fl_draw(label(), x() + MARGIN, y(), w() - MARGIN, h(), FL_ALIGN_LEFT);
-        if (value()){
-            fl_color(ACCENT);
-            fl_rectf(x() + w() - 3, y(), 3, h());
-        }
-    }
-};
 
 SettingsWindow::SettingsWindow(SettingsStore& settings, ModelDownloader& downloader)
     : settings(settings), downloader(downloader){
@@ -91,7 +63,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, ModelDownloader& downloa
     sidebar->color(sidebar_color);
     for (size_t i = 0; i < std::size(CATEGORY_NAMES); ++i){
         const int y = MARGIN + static_cast<int>(i) * CATEGORY_H;
-        Fl_Button* category = new CategoryButton(0, y, SIDEBAR_W, CATEGORY_H, CATEGORY_NAMES[i]);
+        Fl_Button* category = new CategoryButton(0, y, SIDEBAR_W, CATEGORY_H, CATEGORY_NAMES[i], MARGIN);
         category->callback(on_category, this);
         categories.push_back(category);
     }

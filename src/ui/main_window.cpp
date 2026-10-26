@@ -37,7 +37,6 @@ static constexpr double RECORD_TICK = 0.1;
 static constexpr double UNLOAD_AFTER = 5 * 60;
 
 // Looks of the parts of a Jisho result
-static const Fl_Color DIM = fl_rgb_color(70, 70, 70);
 static const TextStyle WORD{FL_HELVETICA_BOLD, 24};
 static const TextStyle READING{FL_HELVETICA, 16, DIM};
 static const TextStyle COMMON{FL_HELVETICA_BOLD, 12, fl_rgb_color(40, 120, 40)};
