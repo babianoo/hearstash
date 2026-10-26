@@ -26,6 +26,15 @@ inline constexpr const char* ICON_SETTINGS =
     "<circle cx='8' cy='8' r='2.2'/>"
     "</svg>";
 
+// Clock with an arrow going back around it: the search history
+inline constexpr const char* ICON_HISTORY =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' "
+    "stroke='#444' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'>"
+    "<path d='M3.3 8A5.5 5.5 0 1 1 4.91 11.89'/>"
+    "<path d='M1.7 6.6 3.3 8.2 4.9 6.6'/>"
+    "<path d='M8.8 5v3.2l2.2 1.4'/>"
+    "</svg>";
+
 // Eye: almond outline with a round pupil. Shown while the text is hidden;
 // clicking it shows the text.
 inline constexpr const char* ICON_SHOW =

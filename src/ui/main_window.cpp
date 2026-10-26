@@ -20,6 +20,7 @@
 #include "core/whisper_models.h"
 #include "ui/clipboard.h"
 #include "ui/history_store.h"
+#include "ui/history_window.h"
 #include "ui/icons.h"
 #include "ui/search_bar.h"
 #include "ui/settings_store.h"
@@ -30,6 +31,8 @@
 
 // Space around the search bar and results box
 static constexpr int MARGIN = 10;
+// Between the round buttons in the top-right corner
+static constexpr int ICON_BTN_GAP = 6;
 // Seconds between checks on a recording
 static constexpr double RECORD_TICK = 0.1;
 // Seconds without transcribing before the model's memory, up to a few GB,
@@ -99,6 +102,25 @@ static std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entri
     return spans;
 }
 
+// A round button with an icon, like Settings, at x along the top. As tall
+// as the search bar, so it lines up with it once the bar moves to the top.
+static Fl_Button* icon_button(int x, const char* svg, const char* tooltip){
+    Fl_Button* btn = new Fl_Button(x, MARGIN, PILL_H, PILL_H);
+    // Same box as the Search button; on a square button it's a circle.
+    // Pressed it becomes FL_ROUND_DOWN_BOX, which has the same shape.
+    // (FL_ROUNDED_BOX's pressed look is a square, whose corners stay
+    // behind on release.)
+    btn->box(FL_ROUND_UP_BOX);
+    // The button only borrows the image and never deletes it. It's needed
+    // for as long as the window exists, so it's simply never freed.
+    auto* icon = new Fl_SVG_Image(nullptr, svg);
+    icon->scale(18, 18);
+    btn->image(icon);
+    btn->tooltip(tooltip);
+    btn->clear_visible_focus();    // No dotted focus ring after a click
+    return btn;
+}
+
 MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader)
     : settings(settings), history(history), downloader(downloader){
     // win is constructed (as a member) before this body runs, so it's
@@ -132,22 +154,10 @@ MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDown
     // Record Input in the "+" menu, and the red "+" that stops it
     search_bar->on_record([this]{ on_record(); });
 
-    // Settings button in the top-right corner, as tall as the search bar so
-    // it lines up with it once the bar moves to the top.
-    Fl_Button* settings_btn = new Fl_Button(win.w() - MARGIN - 25, MARGIN, PILL_H, PILL_H);
-    // Same box as the Search button; on a square button it's a circle.
-    // Pressed it becomes FL_ROUND_DOWN_BOX, which has the same shape.
-    // (FL_ROUNDED_BOX's pressed look is a square, whose corners stay
-    // behind on release.)
-    settings_btn->box(FL_ROUND_UP_BOX);
-    // The button only borrows the image and never deletes it. It's needed
-    // for as long as the window exists, so it's simply never freed.
-    auto* gear = new Fl_SVG_Image(nullptr, ICON_SETTINGS);
-    gear->scale(18, 18);
-    settings_btn->image(gear);
-    settings_btn->tooltip("Settings");
-    settings_btn->clear_visible_focus();    // No dotted focus ring after a click
-    settings_btn->callback(on_settings, this);
+    // Settings button in the top-right corner, and History left of it
+    const int settings_x = win.w() - MARGIN - 25;
+    icon_button(settings_x, ICON_SETTINGS, "Settings")->callback(on_settings, this);
+    icon_button(settings_x - ICON_BTN_GAP - PILL_H, ICON_HISTORY, "History")->callback(on_history, this);
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
     win.end();
@@ -284,6 +294,11 @@ SettingsWindow& MainWindow::settings_window(){
     return *settings_win;
 }
 
+HistoryWindow& MainWindow::history_window(){
+    if (!history_win) history_win = std::make_unique<HistoryWindow>();
+    return *history_win;
+}
+
 void MainWindow::show(int argc, char** argv){
     win.show(argc, argv);
     clipboard_init();    // Needs the display, which show() opens
@@ -370,6 +385,10 @@ void MainWindow::on_close(Fl_Widget*, void*){
 
 void MainWindow::on_settings(Fl_Widget*, void* data){
     static_cast<MainWindow*>(data)->settings_window().show();
+}
+
+void MainWindow::on_history(Fl_Widget*, void* data){
+    static_cast<MainWindow*>(data)->history_window().show();
 }
 
 void MainWindow::on_search_done(void* data){

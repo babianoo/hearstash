@@ -19,6 +19,7 @@
 // Only pointers and references to these are stored here, so the full
 // headers are included in main_window.cpp instead.
 class HistoryStore;
+class HistoryWindow;
 class ModelDownloader;
 class Recorder;
 class SearchBar;
@@ -33,10 +34,10 @@ class MainWindow {
 public:
     // settings, history and downloader have to outlive the window
     MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader);
-    // Defined in main_window.cpp, where SettingsWindow and Recorder are
-    // complete types, which unique_ptr needs to delete them. Stops a
-    // transcription still running and waits for it, or for the model to
-    // finish loading.
+    // Defined in main_window.cpp, where SettingsWindow, HistoryWindow and
+    // Recorder are complete types, which unique_ptr needs to delete them.
+    // Stops a transcription still running and waits for it, or for the
+    // model to finish loading.
     ~MainWindow();
 
     // One app, one window: copying makes no sense
@@ -86,6 +87,9 @@ private:
     // member: constructing a window makes it the current group, so while
     // win's widgets are being created it would take them in instead of win.
     std::unique_ptr<SettingsWindow> settings_win;
+    // Created on the first click of the history button, for the same
+    // reason
+    std::unique_ptr<HistoryWindow> history_win;
 
     // Bumped on every search. Only the latest search's result is shown,
     // so a slow earlier search can't overwrite a newer one.
@@ -112,6 +116,7 @@ private:
     // comes in through data.
     static void on_search(Fl_Widget* w, void* data);
     static void on_settings(Fl_Widget* w, void* data);
+    static void on_history(Fl_Widget* w, void* data);
     // The window's close button: quits the app. Escape does nothing.
     static void on_close(Fl_Widget* w, void* data);
     // Runs on the UI thread, called by Fl::awake() from a search thread
@@ -133,6 +138,7 @@ private:
     void stop_recording();
     // Created on first use, for the same reason as settings_win
     SettingsWindow& settings_window();
+    HistoryWindow& history_window();
     void move_bar_to_top();
     // Fills the space under the search bar, which grows with long text
     void place_results();
