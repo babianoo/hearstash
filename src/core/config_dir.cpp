@@ -41,6 +41,16 @@ std::filesystem::path config_dir(){
 #endif
 }
 
+std::filesystem::path state_dir(){
+#ifdef _WIN32
+    // Windows has no folder for state, and Roaming follows the user from
+    // machine to machine like the history should
+    return app_dir_in(L"APPDATA");
+#else
+    return app_dir_in("XDG_STATE_HOME", ".local/state");
+#endif
+}
+
 std::filesystem::path data_dir(){
 #ifdef _WIN32
     // Local AppData, so gigabytes of models aren't copied from machine to

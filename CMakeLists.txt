@@ -65,6 +65,8 @@ endif()
 add_executable(prototype
     src/main.cpp
     src/core/atomic_write.cpp
+    src/core/bad_file.cpp
+    src/core/history.cpp
     src/core/http.cpp
     src/core/deepl.cpp
     src/core/jisho.cpp
