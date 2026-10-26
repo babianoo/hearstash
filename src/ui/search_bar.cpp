@@ -11,6 +11,7 @@
 
 // FLTK
 #include <FL/Fl.H>
+#include <FL/fl_ask.H>
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Button.H>
 #include <FL/fl_draw.H>
@@ -339,6 +340,10 @@ SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
     show_record_state();
 }
 
+SearchBar::~SearchBar(){
+    Fl::remove_timeout(on_limit_timeout, this);
+}
+
 void SearchBar::record_state(RecordState state){
     current_record_state = state;
     show_record_state();
@@ -547,11 +552,44 @@ void SearchBar::on_submit(Fl_Widget*, void* data){
     static_cast<SearchBar*>(data)->do_callback();
 }
 
-void SearchBar::on_text_modified(int, int inserted, int deleted, int, const char*, void* data){
+void SearchBar::limit_text(){
+    Fl_Text_Buffer* buf = input->buffer();
+    // A UTF-8 character is one byte that isn't 10xxxxxx, then any number
+    // of bytes that are
+    int chars = 0;
+    for (int i = 0; i < buf->length(); ++i)
+        if ((buf->byte_at(i) & 0xC0) != 0x80) ++chars;
+    if (chars <= MAX_CHARS) return;
+
+    // Back from the end of what was inserted, a character at a time. Not
+    // past its start: the text before it was already within the limit.
+    const int end = std::min(cut_end, buf->length());
+    int cut = end;
+    for (int over = chars - MAX_CHARS; over > 0 && cut > cut_start; --over) cut = buf->prev_char(cut);
+    // Calls on_text_modified() again, as a deletion
+    buf->remove(cut, end);
+    fl_beep();
+}
+
+void SearchBar::on_limit_timeout(void* data){
+    static_cast<SearchBar*>(data)->limit_text();
+}
+
+void SearchBar::on_text_modified(int pos, int inserted, int deleted, int, const char*, void* data){
     // Also called when the selection changes, which isn't an edit
     if (inserted == 0 && deleted == 0) return;
 
     SearchBar* self = static_cast<SearchBar*>(data);
+    // Here, since all text comes in through the buffer. Not cut right
+    // away: the newest modify callback is called first, so the text box
+    // hasn't heard of the insert yet, and changing the buffer now would
+    // confuse it. A 0 second timeout runs as soon as this event is done.
+    if (inserted > 0){
+        self->cut_start = pos;
+        self->cut_end = pos + inserted;
+        Fl::remove_timeout(on_limit_timeout, self);
+        Fl::add_timeout(0.0, on_limit_timeout, self);
+    }
     self->collapsed = false;    // Editing shows all of the text again
     self->fit_text();
 }

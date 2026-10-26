@@ -25,13 +25,20 @@ enum class RecordState { Idle, Recording, Transcribing };
 // text fits on one line. Longer text wraps, and the bar grows down with
 // it, up to MAX_LINES lines; past that the text box scrolls.
 //
+// It holds up to MAX_CHARS characters. Text that would go past that is
+// cut there, however it comes in: typed, pasted, dropped or said.
+//
 // Clicking Search or pressing Enter calls the bar's own callback(), so a
 // window sets it like for any other widget. Shift+Enter adds a new line.
 class SearchBar : public Fl_Group {
 public:
     static constexpr int MAX_LINES = 5;
+    // Characters, not bytes: a Japanese one takes 3 bytes in UTF-8
+    static constexpr int MAX_CHARS = 5000;
 
     SearchBar(int x, int y, int w);
+    // Cancels a cut that's still waiting, see limit_text()
+    ~SearchBar() override;
 
     std::string text() const;
     Api api() const { return current_api; }
@@ -101,6 +108,11 @@ private:
     void place_children();
     // Grows or shrinks the bar to fit the text, or one line when collapsed
     void fit_text();
+    // Where the newest text was inserted, while it waits to be cut
+    int cut_start = 0, cut_end = 0;
+    // If the text is over MAX_CHARS, cuts the end off what was inserted
+    // from cut_start to cut_end, as much as goes past it, and beeps
+    void limit_text();
     // Makes the "+" button show current_record_state
     void show_record_state();
 
@@ -111,4 +123,6 @@ private:
     // Fl_Text_Buffer's modify callback
     static void on_text_modified(int pos, int inserted, int deleted, int restyled,
                                  const char* deleted_text, void* data);
+    // Right after text is inserted, to cut what goes past MAX_CHARS
+    static void on_limit_timeout(void* data);
 };
