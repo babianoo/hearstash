@@ -14,17 +14,16 @@
 // Owns the search history and keeps its file in step with it, like
 // SettingsStore does for the settings: changes are saved shortly after.
 //
-// Keeps the newest CAPACITY searches, one entry per query and API: a
-// search made again moves its entry back to the top.
+// Keeps the newest searches, up to its capacity, one entry per query and
+// API: a search made again moves its entry back to the top.
 //
 // UI thread only, like the widgets. A search thread hands its result back
 // to the UI thread, which then adds it.
 class HistoryStore {
 public:
-    static constexpr size_t CAPACITY = 100;
-
-    // Loads the history from file, which is also where it's saved
-    explicit HistoryStore(const std::filesystem::path& file);
+    // Loads the history from file, which is also where it's saved, and
+    // keeps up to capacity searches
+    HistoryStore(const std::filesystem::path& file, size_t capacity);
     // Saves a change that's still waiting to be saved
     ~HistoryStore();
 
@@ -42,6 +41,11 @@ public:
 
     // Deletes the search for query with api, if there's one
     void remove(std::string_view query, Api api);
+    // Deletes every search
+    void clear();
+    // Keeps up to capacity searches from now on. Lowering it deletes the
+    // oldest searches over it.
+    void set_capacity(size_t capacity);
 
     // DeepL's translation of exactly query from an earlier search, or
     // nullptr if there's none kept. Only valid until the history changes.
@@ -56,6 +60,7 @@ public:
 private:
     std::filesystem::path file;
     std::vector<HistoryEntry> history;
+    size_t capacity;
     // Changed since it was last saved
     bool unsaved = false;
 

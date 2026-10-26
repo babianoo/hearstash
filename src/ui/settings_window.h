@@ -9,6 +9,7 @@
 // Only pointers and references to these are stored here, so the full
 // headers are included in settings_window.cpp instead.
 class ClipboardInput;
+class HistoryStore;
 class ModelDownloader;
 class SettingsStore;
 class Fl_Box;
@@ -20,18 +21,19 @@ class Fl_Widget;
 struct WhisperModel;
 
 // The window the gear button opens: a sidebar of categories on the left,
-// and on the right the page of the selected one. The API page has the
-// DeepL key, and the Speech-to-Text page the whisper models, a row each
-// to download, delete and choose one, then the microphone to record
-// from. The other pages are empty.
+// and on the right the page of the selected one. The History page has how
+// many searches the history keeps, and a button that clears it. The API
+// page has the DeepL key, and the Speech-to-Text page the whisper models,
+// a row each to download, delete and choose one, then the microphone to
+// record from. The General page is empty.
 //
 // Changes go into the SettingsStore it was given as they're made, which
 // saves them: there's no Apply button.
 class SettingsWindow {
 public:
-    // settings and downloader have to outlive the window
-    SettingsWindow(SettingsStore& settings, ModelDownloader& downloader);
-    // Stops listening to downloader
+    // settings, history and downloader have to outlive the window
+    SettingsWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader);
+    // Stops listening to history and downloader
     ~SettingsWindow();
 
     // One settings window per app: copying makes no sense
@@ -61,8 +63,10 @@ private:
     };
 
     SettingsStore& settings;
+    HistoryStore& history;
     ModelDownloader& downloader;
-    // From downloader.add_listener
+    // From history.add_listener and downloader.add_listener
+    int history_listener = -1;
     int downloader_listener = -1;
 
     // Owned by SettingsWindow as a member, so no new/delete anywhere.
@@ -75,6 +79,11 @@ private:
     std::vector<Fl_Button*> categories;
     // All in the same spot, right of the sidebar; only one is shown
     std::vector<Fl_Group*> pages;
+    // On the History page. How many searches there are is shown next to
+    // the button that clears them.
+    ClipboardInput* capacity_input = nullptr;
+    Fl_Button* clear_history_btn = nullptr;
+    Fl_Box* history_count = nullptr;
     // On the API page. Starts hidden; key_visibility_btn toggles that.
     ClipboardInput* key_input = nullptr;
     Fl_Button* key_visibility_btn = nullptr;
@@ -88,6 +97,10 @@ private:
     // Static because FLTK callbacks are plain functions; the
     // SettingsWindow comes in through data.
     static void on_category(Fl_Widget* w, void* data);
+    static void on_capacity(Fl_Widget* w, void* data);
+    // The window's close button and Escape
+    static void on_close(Fl_Widget* w, void* data);
+    static void on_clear_history(Fl_Widget* w, void* data);
     static void on_key_changed(Fl_Widget* w, void* data);
     static void on_key_visibility(Fl_Widget* w, void* data);
     static void on_model_chosen(Fl_Widget* w, void* data);
@@ -96,9 +109,15 @@ private:
 
     // Add a page's settings to the current group, a page starting at x
     // that's w wide
+    void add_history_settings(int x, int w);
     void add_api_settings(int x, int w);
     void add_speech_settings(int x, int w);
     void select(size_t i);
+    // Shows how many searches there are, which changes with every search
+    void refresh_history();
+    // Saves the number typed in capacity_input, and deletes the oldest
+    // searches over it. Does nothing if it hasn't changed.
+    void apply_capacity();
     // Hides or shows the key, and switches the button's icon to match
     void set_key_hidden(bool hidden);
     // Where in model_rows the row with widget w is

@@ -7,8 +7,8 @@
 // as JSON. Grouped like the window's categories, each group an object in
 // the file:
 //
-//   {"api": {"deepl_key": "..."}, "speech": {"whisper_model": "small"},
-//    "version": 1}
+//   {"api": {"deepl_key": "..."}, "history": {"capacity": 100},
+//    "speech": {"whisper_model": "small"}, "version": 1}
 //
 // The field names are the JSON keys, so renaming one changes the file
 // format. A field's default is what it gets when the file doesn't have it.
@@ -17,6 +17,16 @@
 struct ApiSettings {
     // Empty when there's none
     std::string deepl_key;
+};
+
+// The History category
+struct HistorySettings {
+    // How many searches the history keeps: the newest ones. Between
+    // MIN_CAPACITY and MAX_CAPACITY.
+    int capacity = 100;
+
+    static constexpr int MIN_CAPACITY = 10;
+    static constexpr int MAX_CAPACITY = 1000;
 };
 
 // The Speech category
@@ -33,6 +43,7 @@ struct SpeechSettings {
 
 struct Settings {
     ApiSettings api;
+    HistorySettings history;
     SpeechSettings speech;
 };
 

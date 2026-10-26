@@ -17,9 +17,11 @@
 #include <FL/Fl_SVG_Image.H>
 
 #include "core/recorder.h"
+#include "core/settings.h"
 #include "core/whisper_models.h"
 #include "ui/category_button.h"
 #include "ui/clipboard_input.h"
+#include "ui/history_store.h"
 #include "ui/icons.h"
 #include "ui/model_downloader.h"
 #include "ui/settings_store.h"
@@ -43,13 +45,18 @@ static constexpr int MODEL_BTN_W = 80, MODEL_BTN_H = 26;
 // The size or progress column, left of the button
 static constexpr int MODEL_STATUS_W = 110;
 
+// On the History page: the box for how many searches to keep, wide
+// enough for 1000, and the button that clears them
+static constexpr int CAPACITY_W = 80;
+static constexpr int CLEAR_BTN_W = 120;
+
 // Where model is in WHISPER_MODELS, and so in model_rows
 static size_t index_of(const WhisperModel& model){
     return static_cast<size_t>(&model - WHISPER_MODELS.data());
 }
 
-SettingsWindow::SettingsWindow(SettingsStore& settings, ModelDownloader& downloader)
-    : settings(settings), downloader(downloader){
+SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader)
+    : settings(settings), history(history), downloader(downloader){
     // win is the current group here, like in MainWindow
 
     // Its own group so the radio buttons only deselect each other
@@ -67,6 +74,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, ModelDownloader& downloa
     const int page_x = SIDEBAR_W, page_w = win.w() - SIDEBAR_W;
     for (size_t i = 0; i < std::size(CATEGORY_NAMES); ++i){
         Fl_Group* page = new Fl_Group(page_x, 0, page_w, win.h());
+        if (i == HISTORY) add_history_settings(page_x, page_w);
         if (i == API) add_api_settings(page_x, page_w);
         if (i == SPEECH_TO_TEXT) add_speech_settings(page_x, page_w);
 
@@ -79,14 +87,105 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, ModelDownloader& downloa
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
     win.end();
+    win.callback(on_close, this);
 
     // While the window is closed too, so a download that finishes then
     // still becomes the chosen model if there's none
     downloader_listener = downloader.add_listener([this](const WhisperModel& model){ refresh_model(model); });
+    history_listener = history.add_listener([this]{ refresh_history(); });
+    refresh_history();
 }
 
 SettingsWindow::~SettingsWindow(){
+    // E.g. typed, then the app quit from the main window. The stores
+    // outlive the window, and save it after.
+    apply_capacity();
+    history.remove_listener(history_listener);
     downloader.remove_listener(downloader_listener);
+}
+
+// How many searches to keep: a label, the number, and a note on what
+// lowering it does. Under them the button that clears the history, with
+// how many searches there are next to it.
+void SettingsWindow::add_history_settings(int x, int w){
+    const int left = x + MARGIN, right = x + w - MARGIN;
+    // Lines up with the first category in the sidebar, like the API page
+    int y = MARGIN + (CATEGORY_H - 20) / 2;
+
+    Fl_Box* label = new Fl_Box(left, y, right - left, 20, "Searches to keep");
+    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    y += label->h() + 4;
+
+    capacity_input = new ClipboardInput(left, y, CAPACITY_W, PILL_H);
+    capacity_input->type(FL_INT_INPUT);
+    capacity_input->value(settings.get().history.capacity);
+    // Not on every keystroke: typing 150 goes through 1, which would
+    // delete all but the newest 10 searches. Only on Enter or leaving the
+    // box, and when the page or window is left: see apply_capacity().
+    capacity_input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
+    capacity_input->callback(on_capacity, this);
+    y += PILL_H + 6;
+
+    Fl_Box* note = new Fl_Box(left, y, right - left, 20);
+    note->copy_label(std::format("From {} to {}. Lowering it deletes the oldest searches over it.",
+                                 HistorySettings::MIN_CAPACITY, HistorySettings::MAX_CAPACITY).c_str());
+    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    note->labelsize(12);
+    note->labelcolor(DIM);
+    y += note->h() + 2 * MARGIN;
+
+    clear_history_btn = new Fl_Button(left, y, CLEAR_BTN_W, MODEL_BTN_H, "Clear History");
+    clear_history_btn->box(FL_ROUND_UP_BOX);
+    clear_history_btn->clear_visible_focus();
+    clear_history_btn->callback(on_clear_history, this);
+
+    history_count = new Fl_Box(left + CLEAR_BTN_W + 10, y, right - left - CLEAR_BTN_W - 10, MODEL_BTN_H);
+    history_count->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    history_count->labelcolor(DIM);
+}
+
+void SettingsWindow::refresh_history(){
+    const size_t count = history.entries().size();
+    if (count == 0) history_count->copy_label("The history is empty.");
+    else history_count->copy_label(std::format("{} search{} in the history", count, count == 1 ? "" : "es").c_str());
+    if (count == 0) clear_history_btn->deactivate();
+    else clear_history_btn->activate();
+}
+
+void SettingsWindow::on_capacity(Fl_Widget*, void* data){
+    static_cast<SettingsWindow*>(data)->apply_capacity();
+}
+
+void SettingsWindow::apply_capacity(){
+    // Empty, or not a number: put back as it was
+    int capacity = settings.get().history.capacity;
+    try {
+        capacity = std::stoi(capacity_input->value());
+    } catch (const std::exception&){}
+
+    if (capacity != settings.get().history.capacity){
+        settings.update([capacity](Settings& s){ s.history.capacity = capacity; });
+        history.set_capacity(static_cast<size_t>(settings.get().history.capacity));
+    }
+    // Clamped by update(), and shown that way
+    capacity_input->value(settings.get().history.capacity);
+}
+
+void SettingsWindow::on_close(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    // Typed but not applied yet: closing is done with it too
+    self->apply_capacity();
+    self->win.hide();
+}
+
+void SettingsWindow::on_clear_history(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const size_t count = self->history.entries().size();
+    const std::string question = std::format("Delete all {} search{} from the history?\n\nThis can't be undone.",
+                                             count, count == 1 ? "" : "es");
+    // Modal: waits for an answer before returning
+    if (fl_choice("%s", "Cancel", "Delete", nullptr, question.c_str()) != 1) return;
+    self->history.clear();
 }
 
 // DeepL key: a label, then the input with an eye button on its right,
@@ -216,6 +315,9 @@ void SettingsWindow::on_category(Fl_Widget* w, void* data){
 }
 
 void SettingsWindow::select(size_t i){
+    // Leaving the History page is done with it too. The box keeps focus
+    // while hidden, so it wouldn't hear about it otherwise.
+    apply_capacity();
     // Already done when the category was clicked, but not when it's
     // selected from code
     categories[i]->setonly();

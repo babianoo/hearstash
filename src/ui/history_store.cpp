@@ -14,10 +14,11 @@
 // Seconds without a change before saving
 static constexpr double SAVE_DELAY = 0.5;
 
-HistoryStore::HistoryStore(const std::filesystem::path& file)
-    : file(file), history(load_history(file)){
-    // E.g. edited by hand. Saved the next time something changes.
-    if (history.size() > CAPACITY) history.resize(CAPACITY);
+HistoryStore::HistoryStore(const std::filesystem::path& file, size_t capacity)
+    : file(file), history(load_history(file)), capacity(capacity){
+    // E.g. edited by hand, or saved with a higher capacity before it was
+    // lowered in the settings file. Saved the next time something changes.
+    if (history.size() > capacity) history.resize(capacity);
 }
 
 HistoryStore::~HistoryStore(){
@@ -39,12 +40,26 @@ void HistoryStore::add(std::string query, Api api, std::optional<std::string> tr
     std::erase_if(history, [&](const HistoryEntry& e){ return e.query == entry.query && e.api == entry.api; });
 
     history.insert(history.begin(), std::move(entry));
-    if (history.size() > CAPACITY) history.pop_back();
+    if (history.size() > capacity) history.pop_back();
     changed();
 }
 
 void HistoryStore::remove(std::string_view query, Api api){
     if (std::erase_if(history, [&](const HistoryEntry& e){ return e.query == query && e.api == api; }) > 0) changed();
+}
+
+void HistoryStore::clear(){
+    if (history.empty()) return;
+    history.clear();
+    changed();
+}
+
+void HistoryStore::set_capacity(size_t capacity){
+    this->capacity = capacity;
+    if (history.size() <= capacity) return;
+    // Newest first, so the oldest are at the end
+    history.resize(capacity);
+    changed();
 }
 
 const std::string* HistoryStore::cached_translation(std::string_view query) const {

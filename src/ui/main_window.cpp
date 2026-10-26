@@ -290,7 +290,7 @@ void MainWindow::on_unload_timeout(void* data){
 }
 
 SettingsWindow& MainWindow::settings_window(){
-    if (!settings_win) settings_win = std::make_unique<SettingsWindow>(settings, downloader);
+    if (!settings_win) settings_win = std::make_unique<SettingsWindow>(settings, history, downloader);
     return *settings_win;
 }
 

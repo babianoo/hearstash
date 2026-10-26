@@ -27,7 +27,7 @@ int main(int argc, char** argv){
     // cancels the downloads still running.
     ModelDownloader downloader;
     // The same goes for it
-    HistoryStore history(state_dir() / "history.json");
+    HistoryStore history(state_dir() / "history.json", settings.get().history.capacity);
 
     MainWindow main_win(settings, history, downloader);
     main_win.show(argc, argv);
