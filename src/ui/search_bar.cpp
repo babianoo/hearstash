@@ -24,9 +24,6 @@
 #include "ui/icons.h"
 #include "ui/theme.h"
 
-// Indexed by Api
-static constexpr const char* API_NAMES[] = {"Jisho", "DeepL", "MyMemory"};
-
 // The "+" button's fill while recording
 static const Fl_Color RECORDING_RED = fl_rgb_color(220, 53, 53);
 // And while transcribing

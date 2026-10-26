@@ -6,6 +6,8 @@
 // FLTK
 #include <FL/Fl_Group.H>
 
+#include "core/api.h"
+
 // Only pointers to these are stored here, so the full headers are
 // included in search_bar.cpp instead.
 class Fl_Box;
@@ -13,9 +15,6 @@ class Fl_Button;
 class Fl_Widget;
 // The text box. Defined in search_bar.cpp, since only SearchBar uses it.
 class SearchInput;
-
-// Same APIs as japanese-helper. Order matches the API menu.
-enum class Api { Jisho, DeepL, MyMemory };
 
 // What the "+" button shows about recording speech, which the window sets
 enum class RecordState { Idle, Recording, Transcribing };
