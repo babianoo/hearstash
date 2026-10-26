@@ -26,7 +26,9 @@ enum class RecordState { Idle, Recording, Transcribing };
 // it, up to MAX_LINES lines; past that the text box scrolls.
 //
 // It holds up to MAX_CHARS characters. Text that would go past that is
-// cut there, however it comes in: typed, pasted, dropped or said.
+// cut there, however it comes in: typed, pasted, dropped or said. Close
+// to it, from COUNTER_FROM, a count like "4,523 / 5,000" shows under the
+// text, red once it's full, and the bar grows a little to make room.
 //
 // Clicking Search or pressing Enter calls the bar's own callback(), so a
 // window sets it like for any other widget. Shift+Enter adds a new line.
@@ -35,6 +37,8 @@ public:
     static constexpr int MAX_LINES = 5;
     // Characters, not bytes: a Japanese one takes 3 bytes in UTF-8
     static constexpr int MAX_CHARS = 5000;
+    // 90% of it
+    static constexpr int COUNTER_FROM = MAX_CHARS * 9 / 10;
 
     SearchBar(int x, int y, int w);
     // Cancels a cut that's still waiting, see limit_text()
@@ -87,6 +91,9 @@ private:
     Fl_Button* search_btn = nullptr;
     Fl_Button* api_btn = nullptr;
     Fl_Box* divider = nullptr;
+    // How many characters there are, under the text. Hidden until
+    // COUNTER_FROM.
+    Fl_Box* counter = nullptr;
 
     Api current_api = Api::Jisho;
     RecordState current_record_state = RecordState::Idle;
@@ -108,6 +115,11 @@ private:
     void place_children();
     // Grows or shrinks the bar to fit the text, or one line when collapsed
     void fit_text();
+    // Characters in the text box. Counted, since its buffer has bytes.
+    int count_chars() const;
+    // Shows or hides the counter, and updates it. Call fit_text() after,
+    // which makes room for it.
+    void update_counter();
     // Where the newest text was inserted, while it waits to be cut
     int cut_start = 0, cut_end = 0;
     // If the text is over MAX_CHARS, cuts the end off what was inserted

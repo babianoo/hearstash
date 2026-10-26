@@ -25,6 +25,18 @@
 #include "ui/icons.h"
 #include "ui/theme.h"
 
+// The counter's row under the text
+static constexpr int COUNTER_H = 16;
+// The counter once the text is full. Same red as errors in the settings.
+static const Fl_Color FULL_RED = fl_rgb_color(200, 40, 40);
+
+// n with commas between thousands, e.g. 4,523
+static std::string with_commas(int n){
+    std::string digits = std::to_string(n);
+    for (int i = static_cast<int>(digits.size()) - 3; i > 0; i -= 3) digits.insert(i, ",");
+    return digits;
+}
+
 // The "+" button's fill while recording
 static const Fl_Color RECORDING_RED = fl_rgb_color(220, 53, 53);
 // And while transcribing
@@ -324,6 +336,11 @@ SearchBar::SearchBar(int x, int y, int w) : Fl_Group(x, y, w, PILL_H){
     divider->box(FL_FLAT_BOX);
     divider->color(fl_color_average(FL_BACKGROUND2_COLOR, FL_FOREGROUND_COLOR, 0.85f));
 
+    counter = new Fl_Box(x, y, w, COUNTER_H);
+    counter->align(FL_ALIGN_RIGHT | FL_ALIGN_INSIDE);
+    counter->labelsize(12);
+    counter->hide();
+
     // "+" that opens the menu (Record Input, API). No box, so the pill shows through; it
     // only draws a round grey circle while pressed. (A white FL_FLAT_BOX
     // would be square and cover the pill's curved edge.) The tooltip shows
@@ -417,6 +434,7 @@ std::string SearchBar::text() const {
 
 void SearchBar::collapse(){
     collapsed = true;
+    update_counter();    // Hidden with the rest of the text
     // The one line left shows the start of the text
     input->insert_position(0);
     input->scroll(1, 0);
@@ -481,16 +499,21 @@ void SearchBar::place_children(){
     const int input_x = divider_x + 1 + 6;
     const int input_h = line_h == 0 ? PILL_H - 4 : shown_lines * line_h + TEXT_MARGIN_Y;
     input->resize(input_x, Y + text_pad(), btn_x - 6 - input_x, input_h);
+
+    // Under the text, in the row fit_text() adds for it, ending where the
+    // text box does
+    counter->resize(input_x, input->y() + input_h, input->w(), COUNTER_H);
 }
 
 void SearchBar::fit_text(){
     if (line_h == 0) return;    // Not shown yet
 
     const int lines = collapsed ? 1 : input->lines(MAX_LINES);
-    if (lines == shown_lines) return;
+    const int height = height_for(lines) + (counter->visible() ? COUNTER_H : 0);
+    if (lines == shown_lines && height == h()) return;
     shown_lines = lines;
 
-    resize(x(), y(), w(), height_for(lines));
+    resize(x(), y(), w(), height);
     // A shorter bar uncovers what's under it, and the pill's corners
     // aren't covered by it in the first place
     if (parent()) parent()->redraw();
@@ -552,13 +575,34 @@ void SearchBar::on_submit(Fl_Widget*, void* data){
     static_cast<SearchBar*>(data)->do_callback();
 }
 
-void SearchBar::limit_text(){
-    Fl_Text_Buffer* buf = input->buffer();
+int SearchBar::count_chars() const {
+    const Fl_Text_Buffer* buf = input->buffer();
     // A UTF-8 character is one byte that isn't 10xxxxxx, then any number
     // of bytes that are
     int chars = 0;
     for (int i = 0; i < buf->length(); ++i)
         if ((buf->byte_at(i) & 0xC0) != 0x80) ++chars;
+    return chars;
+}
+
+void SearchBar::update_counter(){
+    const int chars = count_chars();
+    if (collapsed || chars < COUNTER_FROM){
+        counter->hide();
+        return;
+    }
+    // Over it only until limit_text() cuts it, which this can be drawn
+    // before
+    const int shown = std::min(chars, MAX_CHARS);
+    counter->copy_label(std::format("{} / {}", with_commas(shown), with_commas(MAX_CHARS)).c_str());
+    counter->labelcolor(chars >= MAX_CHARS ? FULL_RED : DIM);
+    counter->show();
+    counter->redraw_label();
+}
+
+void SearchBar::limit_text(){
+    Fl_Text_Buffer* buf = input->buffer();
+    const int chars = count_chars();
     if (chars <= MAX_CHARS) return;
 
     // Back from the end of what was inserted, a character at a time. Not
@@ -591,5 +635,6 @@ void SearchBar::on_text_modified(int pos, int inserted, int deleted, int, const 
         Fl::add_timeout(0.0, on_limit_timeout, self);
     }
     self->collapsed = false;    // Editing shows all of the text again
+    self->update_counter();
     self->fit_text();
 }
