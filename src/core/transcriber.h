@@ -20,8 +20,8 @@ public:
 };
 
 // Turns recorded speech into text with a whisper model. The model is
-// loaded the first time it's needed and kept, since loading takes seconds
-// and hundreds of MB; a call with another model swaps it.
+// loaded the first time it's needed and kept until unload(), since loading
+// takes seconds; a call with another model swaps it.
 //
 // One thread at a time, and not the UI thread: loading and transcribing
 // both block for seconds.
@@ -51,6 +51,11 @@ public:
     // or whisper fails.
     std::string transcribe(const WhisperModel& model, std::span<const float> samples,
                            const std::string& language = "ja", std::stop_token stop = {});
+
+    // Loads model unless it's the one loaded, so transcribe() can start
+    // right away. Can't be stopped partway. Throws std::runtime_error like
+    // transcribe() does.
+    void prepare(const WhisperModel& model);
 
     // nullptr if none is
     const WhisperModel* loaded_model() const { return model; }

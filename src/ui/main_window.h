@@ -1,6 +1,8 @@
 #pragma once
 
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,7 +33,8 @@ public:
     MainWindow(SettingsStore& settings, ModelDownloader& downloader);
     // Defined in main_window.cpp, where SettingsWindow and Recorder are
     // complete types, which unique_ptr needs to delete them. Stops a
-    // transcription still running and waits for it.
+    // transcription still running and waits for it, or for the model to
+    // finish loading.
     ~MainWindow();
 
     // One app, one window: copying makes no sense
@@ -86,12 +89,18 @@ private:
     // Created the first time Record Input is picked, so a machine without
     // audio only finds out then
     std::unique_ptr<Recorder> recorder;
-    // Keeps the chosen model loaded between recordings. Only the
-    // transcription thread uses it, one at a time.
+    // Keeps the chosen model loaded between recordings, until
+    // UNLOAD_AFTER without one. Only the transcription thread uses it,
+    // and the UI thread to unload it while there's no such thread.
     Transcriber transcriber;
-    // Joinable while transcribing. Declared after transcriber, so it's
-    // destroyed first: a jthread requests stop and joins when it dies,
-    // and the thread uses transcriber until then.
+    // What was recorded, handed from the UI thread to the transcription
+    // thread, which waits for it once the model is loaded
+    std::mutex recorded_mutex;
+    std::condition_variable_any recorded_ready;
+    std::optional<std::vector<float>> recorded;
+    // Joinable from the start of a recording until its text comes in.
+    // Declared after what it uses, so it's destroyed first: a jthread
+    // requests stop and joins when it dies.
     std::jthread transcription_thread;
 
     // Static because FLTK callbacks are plain functions; the MainWindow
@@ -106,11 +115,14 @@ private:
     // Runs on the UI thread, called by Fl::awake() from the transcription
     // thread
     static void on_transcribed(void* data);
+    // UNLOAD_AFTER since the last transcription: frees the model
+    static void on_unload_timeout(void* data);
 
     // Record Input was picked, or the red "+" clicked to stop
     void on_record();
+    // Starts recording, and loading the model meanwhile
     void start_recording();
-    // Stops recording and starts transcribing what was recorded
+    // Stops recording and hands what was recorded to be transcribed
     void stop_recording();
     // Created on first use, for the same reason as settings_win
     SettingsWindow& settings_window();

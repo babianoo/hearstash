@@ -81,10 +81,14 @@ void Transcriber::load(const WhisperModel& new_model){
     model = &new_model;
 }
 
+void Transcriber::prepare(const WhisperModel& wanted){
+    if (model != &wanted) load(wanted);
+}
+
 std::string Transcriber::transcribe(const WhisperModel& wanted, std::span<const float> samples,
                                     const std::string& language, std::stop_token stop){
     if (stop.stop_requested()) throw TranscriptionCancelled();
-    if (model != &wanted) load(wanted);
+    prepare(wanted);
     // Loading has no way to stop partway, so it's checked again after
     if (stop.stop_requested()) throw TranscriptionCancelled();
     if (samples.empty()) return "";

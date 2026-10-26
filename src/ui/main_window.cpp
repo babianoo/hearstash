@@ -2,6 +2,7 @@
 
 #include <exception>
 #include <format>
+#include <mutex>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
@@ -30,6 +31,10 @@
 static constexpr int MARGIN = 10;
 // Seconds between checks on a recording
 static constexpr double RECORD_TICK = 0.1;
+// Seconds without transcribing before the model's memory, up to a few GB,
+// is freed. Loading it again takes seconds, but it starts with the
+// recording, so it's mostly done by the time the speaker stops.
+static constexpr double UNLOAD_AFTER = 5 * 60;
 
 // Looks of the parts of a Jisho result
 static const Fl_Color DIM = fl_rgb_color(70, 70, 70);
@@ -150,6 +155,7 @@ MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
 
 MainWindow::~MainWindow(){
     Fl::remove_timeout(on_record_tick, this);
+    Fl::remove_timeout(on_unload_timeout, this);
     // The members then go in reverse order: transcription_thread is
     // stopped and joined before transcriber goes, and recorder stops a
     // recording still running
@@ -186,6 +192,44 @@ void MainWindow::start_recording(){
 
     search_bar->record_state(RecordState::Recording);
     Fl::add_timeout(RECORD_TICK, on_record_tick, this);
+
+    // The thread uses the model from now on
+    Fl::remove_timeout(on_unload_timeout, this);
+    // Loading the model alone takes seconds, so it starts now, while they
+    // talk, and not on the UI thread. The thread then waits for the
+    // recording, and only hands its result back through Fl::awake(). The
+    // previous one has already ended: the state was Idle again only after
+    // its result came in. model points into WHISPER_MODELS, which lives
+    // for the whole program.
+    transcription_thread = std::jthread([this, model](std::stop_token stop){
+        try {
+            transcriber.prepare(*model);
+        } catch (const std::exception&){
+            // Reported once there's a recording: transcribe() tries again
+        }
+
+        std::vector<float> samples;
+        {
+            std::unique_lock lock(recorded_mutex);
+            // False if stopped first: the window is closing, and nobody's
+            // waiting for the result
+            if (!recorded_ready.wait(lock, stop, [this]{ return recorded.has_value(); })) return;
+            samples = std::move(*recorded);
+            recorded.reset();
+        }
+
+        auto* result = new Transcription{.win = this, .text = {}};
+        try {
+            // Nothing recorded is nothing said, even if the model failed
+            if (!samples.empty()) result->text = transcriber.transcribe(*model, samples, "ja", stop);
+        } catch (const TranscriptionCancelled&){
+            delete result;
+            return;
+        } catch (const std::exception& e){
+            result->error = e.what();
+        }
+        Fl::awake(on_transcribed, result);
+    });
 }
 
 void MainWindow::on_record_tick(void* data){
@@ -201,37 +245,15 @@ void MainWindow::on_record_tick(void* data){
 void MainWindow::stop_recording(){
     Fl::remove_timeout(on_record_tick, this);
     std::vector<float> samples = recorder->stop();
-    if (samples.empty()){
-        search_bar->record_state(RecordState::Idle);
-        return;
-    }
-
-    // As chosen when recording started, so changing it meanwhile doesn't
-    // matter. Points into WHISPER_MODELS, which lives for the whole program.
-    const WhisperModel* model = find_model(settings.get().speech.whisper_model);
-    if (!model){
-        search_bar->record_state(RecordState::Idle);
-        return;
-    }
+    // Even if it's empty, so the thread ends. It's Transcribing until then,
+    // which with nothing recorded is only as long as the model takes to
+    // finish loading.
     search_bar->record_state(RecordState::Transcribing);
-
-    // The first time, loading the model alone takes seconds, so not on the
-    // UI thread. The thread has the samples to itself and only hands its
-    // result back through Fl::awake(). The previous one has already ended:
-    // the state was Idle again only after its result came in.
-    transcription_thread = std::jthread([this, model, samples = std::move(samples)](std::stop_token stop){
-        auto* result = new Transcription{.win = this, .text = {}};
-        try {
-            result->text = transcriber.transcribe(*model, samples, "ja", stop);
-        } catch (const TranscriptionCancelled&){
-            // The window is closing: nobody's waiting for the result
-            delete result;
-            return;
-        } catch (const std::exception& e){
-            result->error = e.what();
-        }
-        Fl::awake(on_transcribed, result);
-    });
+    {
+        std::lock_guard lock(recorded_mutex);
+        recorded = std::move(samples);
+    }
+    recorded_ready.notify_one();
 }
 
 void MainWindow::on_transcribed(void* data){
@@ -241,11 +263,19 @@ void MainWindow::on_transcribed(void* data){
     // Its last act was queueing this, so joining takes no time
     self->transcription_thread.join();
     self->search_bar->record_state(RecordState::Idle);
+    Fl::add_timeout(UNLOAD_AFTER, on_unload_timeout, self);
 
     if (!result->error.empty()) fl_alert("Couldn't turn the speech into text:\n\n%s", result->error.c_str());
     // In the box to check before searching: whisper gets words wrong,
     // the small models especially
     else if (!result->text.empty()) self->search_bar->set_text(result->text);
+}
+
+void MainWindow::on_unload_timeout(void* data){
+    MainWindow* self = static_cast<MainWindow*>(data);
+    // Removed when a recording starts, and only added back once its
+    // thread is joined, so nothing else is using the model
+    self->transcriber.unload();
 }
 
 SettingsWindow& MainWindow::settings_window(){
