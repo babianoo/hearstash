@@ -151,6 +151,7 @@ MainWindow::MainWindow(SettingsStore& settings, ModelDownloader& downloader)
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
     win.end();
+    win.callback(on_close, this);
 }
 
 MainWindow::~MainWindow(){
@@ -340,6 +341,13 @@ void MainWindow::on_search(Fl_Widget*, void* data){
         // result. Widgets may only be changed from there.
         Fl::awake(on_search_done, result);
     }).detach();    // Nothing waits for it; it ends on its own after awake()
+}
+
+void MainWindow::on_close(Fl_Widget*, void*){
+    // Settings too: Fl::run() only returns once no window is shown, and
+    // until then a recording would go on with nothing on screen. The
+    // destructors then stop it, and cancel any download.
+    while (Fl::first_window()) Fl::first_window()->hide();
 }
 
 void MainWindow::on_settings(Fl_Widget*, void* data){
