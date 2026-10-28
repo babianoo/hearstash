@@ -11,6 +11,9 @@
 
 // Some APIs reject requests without one
 static constexpr const char* USER_AGENT = "prototype/0.1";
+// Hugging Face takes one, to its download servers. More than this is a
+// loop, or a server that's gone wrong.
+static constexpr long MAX_REDIRECTS = 5;
 
 // unique_ptr with curl's own cleanup function instead of delete, so the
 // handle is freed however we leave the function (return or throw).
@@ -40,12 +43,16 @@ void http_global_init(){
 // curl_slist is curl's linked list of header lines
 using CurlHeaders = std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)>;
 
-// The options every request sets
-static void set_common_options(CURL* curl, const std::string& url){
+// The options every request sets. A redirect is only followed if
+// follow_redirects, and only to HTTPS: one to http:// would send the
+// request, e.g. the search, unencrypted.
+static void set_common_options(CURL* curl, const std::string& url, bool follow_redirects){
     // libcurl is a C library, so it takes C strings
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, follow_redirects ? 1L : 0L);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, MAX_REDIRECTS);
 }
 
 // Throws if the transfer failed or the status isn't 2xx
@@ -62,10 +69,10 @@ static void check_response(CURL* curl, CURLcode res, const std::string& url){
 }
 
 // Sends the request set up on curl and returns the body.
-static std::string perform(CURL* curl, const std::string& url){
+static std::string perform(CURL* curl, const std::string& url, bool follow_redirects){
     std::string body;
 
-    set_common_options(curl, url);
+    set_common_options(curl, url, follow_redirects);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
@@ -118,7 +125,7 @@ static int on_transfer_info(void* d, curl_off_t total, curl_off_t received, curl
 
 std::string http_get(const std::string& url){
     CurlHandle curl = make_handle();
-    return perform(curl.get(), url);
+    return perform(curl.get(), url, true);
 }
 
 std::string http_post(const std::string& url, const std::string& body,
@@ -140,7 +147,10 @@ std::string http_post(const std::string& url, const std::string& body,
     curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, body.c_str());
     curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
     curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, list.get());
-    return perform(curl.get(), url);
+    // Not followed: DeepL doesn't redirect, and a 307 or 308 would send
+    // the body, the text, on to wherever it points. One is reported as
+    // an HttpError instead.
+    return perform(curl.get(), url, false);
 }
 
 void http_download(const std::string& url, const std::filesystem::path& file,
@@ -151,7 +161,7 @@ void http_download(const std::string& url, const std::filesystem::path& file,
     Download download{curl.get(), std::ofstream(file, std::ios::binary), on_progress, std::move(stop), nullptr};
     if (!download.out) throw std::runtime_error(std::format("Couldn't open {}", file.string()));
 
-    set_common_options(curl.get(), url);
+    set_common_options(curl.get(), url, true);
     // No CURLOPT_TIMEOUT, since a big file takes minutes. It gives up
     // instead when less than 1 KB/s arrives for 30 seconds.
     curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT, 15L);

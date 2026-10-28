@@ -36,6 +36,7 @@ void http_global_init();
 
 // Blocking requests that return the response body. headers are full
 // header lines, e.g. "Content-Type: application/json".
+// Redirects are only followed to HTTPS, and http_post doesn't follow them.
 // Throw HttpError on a non-2xx status, std::runtime_error on network failure.
 std::string http_get(const std::string& url);
 std::string http_post(const std::string& url, const std::string& body,
