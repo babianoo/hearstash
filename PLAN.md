@@ -191,12 +191,49 @@ picture.
 - Running in the background: start with Windows, a tray icon, closing to
   the tray.
 
+### Possible: dictation mode ("type what you heard")
+
+An optional mode, off by default, for people who want to practise
+listening instead of only reading the transcript.
+
+Why: the quick path (hotkey → Enter → read) skips the part where the
+user tries to hear the line, and that struggle is where listening
+practice happens. Learners also tend to feel they've learned more from a
+smooth answer than they have. This keeps the struggle in, the way a
+tutor gives hints instead of answers. It also answers the obvious
+question in the pitch: "doesn't this remove the learning?" The app
+removes the busywork (rewinding, retyping, filling in cards), not the
+listening.
+
+How it works, after phase 4:
+
+- The transcript stays hidden. The user plays the selection as many
+  times as they like and types what they heard in hiragana (with the
+  Windows IME).
+- Enter checks it against whisper's transcript and shows both, with the
+  parts that differ highlighted. Then the window works as usual: lookup,
+  add to Anki.
+- A key to give up and show the transcript without typing anything.
+
+Things to solve:
+
+- Whisper writes kanji, so the transcript has to be turned into kana
+  before comparing. That needs readings for the words: a tokenizer with a
+  dictionary (MeCab or Sudachi), or the JMdict work above. This is the
+  biggest part.
+- Compare loosely: katakana and hiragana count as the same, and
+  punctuation, spaces and ー vs. a vowel are ignored.
+- Whisper is sometimes wrong, especially on anime. So it shows the
+  differences rather than marking the answer wrong, and the user decides.
+  A mismatch can mean whisper misheard.
+- Maybe later: keep a score, or add a card on a miss.
+
 ## Settings to add
 
 To `src/core/settings.h`, as new categories in the settings window:
 
 - **Buffer**: length in seconds (with limits, e.g. 10–120), on/off, the
-  hotkey, the default selection length.
+  hotkey, the default selection length, dictation mode on/off.
 - **Anki**: deck, note type, field mapping, the last crop rectangle.
 
 ## Privacy
