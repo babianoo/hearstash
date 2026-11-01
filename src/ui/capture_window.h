@@ -32,12 +32,14 @@ struct TextSpan;
 // button. Enter (or the Transcribe button) turns it into text with
 // whisper, shown under the waveform; Escape then cancels. Selecting part
 // of the text with the mouse looks it up on Jisho, in a panel beside it.
+// Add to Anki (Ctrl+N) then opens a card with the word, the line, the
+// selected audio and the screenshot taken with the capture.
 //
 // The whisper model starts loading as soon as a capture opens, so it's
 // mostly ready by the time the selection is.
 //
 // Closing it (or Escape) hides it, stops playing and transcribing, and
-// forgets the audio.
+// forgets the audio and the screenshot.
 class CaptureWindow {
 public:
     // settings and transcriber have to outlive the window
