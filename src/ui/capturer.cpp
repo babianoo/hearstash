@@ -18,7 +18,8 @@
 // devices takes a few milliseconds.
 static constexpr double FOLLOW_TICK = 3;
 
-Capturer::Capturer(SettingsStore& settings) : settings(settings){
+Capturer::Capturer(SettingsStore& settings, SharedTranscriber& transcriber)
+    : settings(settings), transcriber(transcriber){
     apply_settings();
     settings_listener = settings.add_listener([this]{ apply_settings(); });
     Fl::add_timeout(FOLLOW_TICK, on_follow_tick, this);
@@ -92,6 +93,6 @@ void Capturer::capture(){
             fl_alert("Nothing to capture: the buffer isn't recording.\n\n%s", error_.c_str());
         return;
     }
-    if (!capture_win) capture_win = std::make_unique<CaptureWindow>();
+    if (!capture_win) capture_win = std::make_unique<CaptureWindow>(settings, transcriber);
     capture_win->open(buffer->snapshot(), AudioBuffer::SAMPLE_RATE, settings.get().buffer.selection_seconds);
 }

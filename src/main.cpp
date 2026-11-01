@@ -47,12 +47,12 @@ int main(int argc, char** argv){
     ModelDownloader downloader;
     // The same goes for it
     HistoryStore history(state_dir() / "history.json", settings.get().history.capacity);
-    // The same goes for it. Keeps the last seconds of what the computer
-    // plays from now until the app quits.
-    Capturer capturer(settings);
     // The same goes for it. The whisper model the main window and the
     // capture window both transcribe with.
     SharedTranscriber transcriber;
+    // The same goes for it. Keeps the last seconds of what the computer
+    // plays from now until the app quits.
+    Capturer capturer(settings, transcriber);
 
     MainWindow main_win(settings, history, downloader, capturer, transcriber);
     main_win.show(argc, argv);

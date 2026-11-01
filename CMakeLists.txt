@@ -75,6 +75,7 @@ add_executable(prototype
     src/core/local_time.cpp
     src/core/config_dir.cpp
     src/core/recorder.cpp
+    src/core/resample.cpp
     src/core/sample_ring.cpp
     src/core/settings.cpp
     src/core/sha1.cpp
@@ -132,3 +133,9 @@ add_executable(sample_ring_test tests/sample_ring_test.cpp src/core/sample_ring.
 target_compile_options(sample_ring_test PRIVATE -Wall -Wextra)
 target_include_directories(sample_ring_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME sample_ring COMMAND sample_ring_test)
+
+add_executable(resample_test tests/resample_test.cpp src/core/resample.cpp)
+target_compile_options(resample_test PRIVATE -Wall -Wextra)
+target_include_directories(resample_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(resample_test PRIVATE miniaudio)
+add_test(NAME resample COMMAND resample_test)

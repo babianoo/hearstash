@@ -9,6 +9,7 @@ class AudioBuffer;
 class CaptureWindow;
 class GlobalHotkey;
 class SettingsStore;
+class SharedTranscriber;
 
 // Runs the rolling buffer of what the computer plays, from startup until
 // the app quits, as the Buffer settings say: on or off, and how long.
@@ -18,10 +19,11 @@ class SettingsStore;
 // UI thread only, like the widgets.
 class Capturer {
 public:
-    // settings has to outlive it. Starts recording if the settings say to;
+    // settings and transcriber have to outlive it, which the capture
+    // window transcribes with. Starts recording if the settings say to;
     // if that fails, error() says why. Starts listening for the shortcut;
     // if that fails, hotkey_error() says why.
-    explicit Capturer(SettingsStore& settings);
+    Capturer(SettingsStore& settings, SharedTranscriber& transcriber);
     // Defined in capturer.cpp, where the classes in unique_ptrs are
     // complete. Stops recording and stops listening.
     ~Capturer();
@@ -43,6 +45,7 @@ public:
 
 private:
     SettingsStore& settings;
+    SharedTranscriber& transcriber;
     // From settings.add_listener
     int settings_listener = -1;
     // Created on the first start, so the audio system is only asked once
