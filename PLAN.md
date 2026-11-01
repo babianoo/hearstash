@@ -5,8 +5,12 @@ class. It grew out of the "rolling audio buffer" experiment in Japanese
 Helper, and takes ideas from Yomitan and from mining cards with mpv +
 mpvacious.
 
-Nothing here is built yet. This is the order to build it in, and what
-still needs deciding.
+**Status (November 2026): the Linux side is complete.** Phases 1–7
+work on Linux (PulseAudio or PipeWire, a wlroots desktop like Hyprland
+for screenshots). What's left are the Windows parts, listed under
+"Left for Windows" below and marked `TODO(Windows)` in the code. Until
+they're done, the Windows build runs as before, and the rolling buffer
+says it isn't done on Windows yet.
 
 ## What the user does
 
@@ -80,6 +84,14 @@ it is for the mic button.
 Done when: it runs from startup, `snapshot()` returns the last N seconds,
 and silence shows up as silence.
 
+**Linux: done.** It records the default output's monitor device through
+PulseAudio (PipeWire's PulseAudio server works too), and checks every 3 s
+whether the default output changed, moving to the new one. The ring is
+`SampleRing` (src/core/sample_ring.h) with `GapDetector` for the silence,
+tested in tests/sample_ring_test.cpp. `Capturer` (src/ui/capturer.h)
+runs it from startup; Settings > Buffer turns it on or off and sets the
+length. **Windows: left** (WASAPI loopback in `AudioBuffer::open_device`).
+
 ### 2. Global hotkey
 
 New `src/ui/global_hotkey.{h,cpp}`.
@@ -93,6 +105,15 @@ New `src/ui/global_hotkey.{h,cpp}`.
 
 Done when: pressing it from any app (mpv, a fullscreen browser) opens the
 capture window.
+
+**Linux: done, differently.** Wayland lets no app grab a key, so the
+desktop owns the shortcut: the user binds a key to `prototype --capture`
+(e.g. `bind = SUPER, A, exec, /path/to/prototype --capture` in
+hyprland.conf), which passes the press to the running app through a
+socket in `$XDG_RUNTIME_DIR`. Settings > Buffer shows the command with
+the right path. This works on X11 desktops too, so no `XGrabKey` was
+needed. **Windows: left** (`RegisterHotKey`, src/ui/global_hotkey.cpp,
+and a setting for the key combination).
 
 ### 3. Capture window: waveform, selection, playback
 
@@ -110,6 +131,9 @@ New `src/ui/capture_window.{h,cpp}` and `src/ui/waveform.{h,cpp}`.
 
 Done when: you can select a line, hear it, and adjust the edges.
 
+**Done** (no platform code): src/ui/waveform.h, src/ui/capture_window.h
+and src/core/clip_player.h.
+
 ### 4. Transcribe the selection
 
 - Resample the selection to 16 kHz if the buffer isn't, and hand it to
@@ -125,6 +149,11 @@ Done when: you can select a line, hear it, and adjust the edges.
 
 Done when: hotkey → Enter shows the right text, and Esc cancels.
 
+**Done** (no platform code). The model starts loading when a capture
+opens. `SharedTranscriber` (src/ui/shared_transcriber.h) keeps one model
+in memory for both the mic button and captures. Whisper's segments with
+timestamps are still to do.
+
 ### 5. Look up what's selected
 
 - When the mouse button is released over selected text, search for it
@@ -135,6 +164,9 @@ Done when: hotkey → Enter shows the right text, and Esc cancels.
 
 Done when: selecting a word shows its reading and meaning. **This is the
 demo.**
+
+**Done** (no platform code). Spaces and punctuation around the selection
+are dropped first (src/core/lookup_text.h, tested).
 
 ### 6. Screenshot at the hotkey, and cropping
 
@@ -161,6 +193,17 @@ New `src/core/screenshot.{h,cpp}` (Windows) and `src/ui/crop_view.{h,cpp}`.
 Done when: the screenshot shows the video, not a black box, and the crop
 is kept between cards.
 
+**Linux: done.** grim takes the screenshot (on Hyprland, of the monitor
+`hyprctl` says has the focus), which is only on wlroots desktops; GNOME
+and KDE would need the screenshot portal. Two changes from the plan:
+JPEG goes through libjpeg-turbo, which FLTK already uses, instead of
+`stb_image_write` (fetching stb as a new submodule was blocked in the
+session that built this; either works), and the shrinking before saving
+is a small averaging filter in src/core/image.cpp. The crop is kept as
+fractions of the screenshot, so it still fits after a resolution change.
+**Windows: left** (the GDI capture in `take_screenshot`,
+src/core/screenshot.cpp). The crop view and JPEG code are shared.
+
 ### 7. Add to Anki
 
 New `src/core/anki_connect.{h,cpp}`, ported from japanese-helper's
@@ -180,21 +223,43 @@ src/api.cpp.
 Done when: a card shows up in Anki with sound that plays and the cropped
 picture.
 
+**Done** (no platform code), apart from adding a card to a running Anki,
+which still has to be tried by hand: Anki wasn't open while it was
+built, so only "Anki isn't open" was tested. Picking a note type in
+Settings > Anki guesses the fields from their names (src/core/anki_fields.h,
+tested). Cards are tagged `prototype`, and pictures are at most 480 px
+tall.
+
+### Left for Windows
+
+Each is marked `TODO(Windows)` in the code:
+
+- `AudioBuffer::open_device` (src/core/audio_buffer.cpp):
+  `ma_device_type_loopback` on WASAPI, which follows the default output
+  by itself, so `follow_default_output` can stay a no-op there.
+- `GlobalHotkey` (src/ui/global_hotkey.cpp): `RegisterHotKey` and
+  `WM_HOTKEY`, plus a setting for the key combination on the Buffer
+  page, which shows the `--capture` command only on Linux.
+  `send_hotkey_press` and `capture_command` aren't needed there.
+- `take_screenshot` (src/core/screenshot.cpp): the GDI capture, then
+  DXGI if video comes out black.
+- Building: libjpeg-turbo is a new dependency (MSYS2:
+  `mingw-w64-x86_64-libjpeg-turbo`).
+
 ### Later
 
 - Local dictionary (JMdict) with deinflection: works offline, is faster,
   and allows Yomitan-style lookup by hovering instead of selecting.
 - Whisper segment timestamps, so selecting a word can pick its sentence
   and that sentence's audio by itself.
-- Linux: the PulseAudio/PipeWire monitor source for audio, plus the
-  hotkey and the screenshot.
+- Linux: screenshots on GNOME and KDE (the screenshot portal), and on X11.
 - Running in the background: start with Windows, a tray icon, closing to
   the tray.
 
 ### Possible: dictation mode ("type what you heard")
 
 An optional mode, off by default, for people who want to practise
-listening instead of only reading the transcript.
+listening instead of only reading the transcript. Not built yet.
 
 Why: the quick path (hotkey → Enter → read) skips the part where the
 user tries to hear the line, and that struggle is where listening
@@ -236,6 +301,8 @@ To `src/core/settings.h`, as new categories in the settings window:
   hotkey, the default selection length, dictation mode on/off.
 - **Anki**: deck, note type, field mapping, the last crop rectangle.
 
+Done, except the hotkey (Windows) and dictation mode (not built).
+
 ## Privacy
 
 The app records everything the computer plays, all the time, so this has
@@ -244,21 +311,30 @@ to be clear and safe, and it's a point worth making in the pitch:
 - Audio stays in memory and is never written to disk, except a clip the
   user adds to a card.
 - A visible sign that it's listening (tray icon), and a way to pause it.
+  (Pausing is the on/off setting. The tray icon is still to do, with the
+  rest of running in the background.)
 - Nothing is sent anywhere except what the user chooses to look up.
 
 ## Open questions
 
-- **Sample rate of the buffer**: 16 kHz (simplest, but clips sound
-  muffled) or 48 kHz (better clips, one resample before whisper)?
-  Suggestion: 48 kHz mono.
-- **Where cropping happens**: in the capture window right away, or only
-  in the card window? Suggestion: the card window, with the last crop
-  already applied, so people who only want to read the transcript skip it.
-- **Which monitor**: the one with the foreground window, or the one with
-  the mouse? They're usually the same.
+Decided while building the Linux side, all as suggested:
+
+- **Sample rate of the buffer**: 48 kHz mono, resampled to 16 kHz for
+  whisper (src/core/resample.h).
+- **Where cropping happens**: the card window, with the last crop
+  already applied.
+- **Which monitor**: the one with the focused window.
+- **One window or two**: one capture window for the waveform, transcript
+  and lookup; the card is a second window, since it's optional.
+- **Hotkey while the window is open**: a new capture, replacing the one
+  shown, since it's most likely a new line.
+
+Still open:
+
 - **Whisper model**: which size is fast enough on a typical student
-  laptop for a 5–10 s clip? Needs measuring for the demo.
-- **One window or two**: waveform, transcript and lookup in one window
-  (suggested), or a separate window for each step?
-- **Hotkey while the window is open**: take a new capture, or bring the
-  window back?
+  laptop for a 5–10 s clip? Measured on the 8-core laptop it was built
+  on: about 6 s with base and 7 s with small for an 8 s clip, with the
+  model already loaded. Whisper pads every clip to 30 s, so a short clip
+  costs about as much as a long one; setting `audio_ctx` to fit the clip
+  could make it several times faster, at some cost in accuracy.
+  Worth trying before the demo.
