@@ -1,9 +1,14 @@
+#include <exception>
+#include <iostream>
+#include <string_view>
+
 // FLTK
 #include <FL/Fl.H>
 
 #include "core/config_dir.h"
 #include "core/http.h"
 #include "ui/capturer.h"
+#include "ui/global_hotkey.h"
 #include "ui/theme.h"
 #include "ui/history_store.h"
 #include "ui/main_window.h"
@@ -11,6 +16,18 @@
 #include "ui/settings_store.h"
 
 int main(int argc, char** argv){
+    // Run by the key the user bound to it: passes the press on to the app
+    // that's running, and quits
+    if (argc == 2 && std::string_view(argv[1]) == CAPTURE_ARG){
+        try {
+            send_hotkey_press();
+            return 0;
+        } catch (const std::exception& e){
+            std::cerr << "Couldn't capture: " << e.what() << '\n';
+            return 1;
+        }
+    }
+
     // Before any thread exists: searches and downloads run on their own
     // threads
     http_global_init();

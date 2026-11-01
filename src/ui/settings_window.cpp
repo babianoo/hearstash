@@ -23,6 +23,7 @@
 #include "ui/capturer.h"
 #include "ui/category_button.h"
 #include "ui/clipboard_input.h"
+#include "ui/global_hotkey.h"
 #include "ui/history_store.h"
 #include "ui/icons.h"
 #include "ui/model_downloader.h"
@@ -573,8 +574,36 @@ void SettingsWindow::add_buffer_settings(int x, int w){
     selection_seconds_input->value(settings.get().buffer.selection_seconds);
     selection_seconds_input->callback(on_buffer_seconds, this);
 
-    buffer_status = new Fl_Box(left, y, right - left, 40);
-    buffer_status->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+    buffer_status = new Fl_Box(left, y, right - left, 20);
+    buffer_status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    y += buffer_status->h() + 14;
+
+    // The command to bind to a key, in a box it can be copied from. None
+    // on Windows, where the shortcut will be a setting of its own.
+    const std::string command = capture_command();
+    if (command.empty()) return;
+
+    Fl_Box* label = new Fl_Box(left, y, right - left, 20, "Capture shortcut");
+    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    y += label->h() + 4;
+
+    auto* command_box = new ClipboardInput(left, y, right - left, PILL_H);
+    command_box->value(command.c_str());
+    command_box->readonly(1);
+    y += PILL_H + 6;
+
+    // Wayland lets no app grab a key for itself
+    Fl_Box* note = new Fl_Box(left, y, right - left, 32,
+                              "Bind a key to it in your desktop's settings, e.g. in hyprland.conf:\n"
+                              "bind = SUPER, A, exec, <the command>");
+    note->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+    note->labelsize(12);
+    note->labelcolor(DIM);
+    y += note->h() + 4;
+
+    hotkey_status = new Fl_Box(left, y, right - left, 20);
+    hotkey_status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    hotkey_status->labelcolor(ERROR_COLOR);
 }
 
 void SettingsWindow::on_buffer_enabled(Fl_Widget*, void* data){
@@ -622,4 +651,9 @@ void SettingsWindow::refresh_buffer(){
         buffer_status->labelcolor(ERROR_COLOR);
     }
     buffer_status->redraw();
+
+    if (hotkey_status){
+        hotkey_status->copy_label(capturer.hotkey_error().c_str());
+        hotkey_status->redraw();
+    }
 }

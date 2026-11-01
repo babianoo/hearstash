@@ -107,6 +107,8 @@ private:
     ClipboardInput* selection_seconds_input = nullptr;
     // Recording, off, or why it can't record
     Fl_Box* buffer_status = nullptr;
+    // Why the capture shortcut can't be received, if it can't
+    Fl_Box* hotkey_status = nullptr;
 
     // Static because FLTK callbacks are plain functions; the
     // SettingsWindow comes in through data.

@@ -67,6 +67,7 @@ add_executable(prototype
     src/core/atomic_write.cpp
     src/core/audio_buffer.cpp
     src/core/bad_file.cpp
+    src/core/clip_player.cpp
     src/core/history.cpp
     src/core/http.cpp
     src/core/deepl.cpp
@@ -80,11 +81,13 @@ add_executable(prototype
     src/core/time_ranges.cpp
     src/core/transcriber.cpp
     src/core/whisper_models.cpp
+    src/ui/capture_window.cpp
     src/ui/capturer.cpp
     src/ui/category_button.cpp
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
     src/ui/filter_bar.cpp
+    src/ui/global_hotkey.cpp
     src/ui/history_store.cpp
     src/ui/history_table.cpp
     src/ui/history_window.cpp
@@ -95,6 +98,7 @@ add_executable(prototype
     src/ui/settings_window.cpp
     src/ui/smooth_scroll.cpp
     src/ui/theme.cpp
+    src/ui/waveform.cpp
     src/ui/wrapped_text.cpp
 )
 # Only on our own code: whisper.cpp sets its own warnings, and miniaudio's
