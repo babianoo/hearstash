@@ -14,6 +14,7 @@
 #include "ui/main_window.h"
 #include "ui/model_downloader.h"
 #include "ui/settings_store.h"
+#include "ui/shared_transcriber.h"
 
 int main(int argc, char** argv){
     // Run by the key the user bound to it: passes the press on to the app
@@ -49,8 +50,11 @@ int main(int argc, char** argv){
     // The same goes for it. Keeps the last seconds of what the computer
     // plays from now until the app quits.
     Capturer capturer(settings);
+    // The same goes for it. The whisper model the main window and the
+    // capture window both transcribe with.
+    SharedTranscriber transcriber;
 
-    MainWindow main_win(settings, history, downloader, capturer);
+    MainWindow main_win(settings, history, downloader, capturer, transcriber);
     main_win.show(argc, argv);
 
     return Fl::run();

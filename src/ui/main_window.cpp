@@ -25,6 +25,7 @@
 #include "ui/search_bar.h"
 #include "ui/settings_store.h"
 #include "ui/settings_window.h"
+#include "ui/shared_transcriber.h"
 #include "ui/theme.h"
 #include "ui/smooth_scroll.h"
 #include "ui/wrapped_text.h"
@@ -35,10 +36,6 @@ static constexpr int MARGIN = 10;
 static constexpr int ICON_BTN_GAP = 6;
 // Seconds between checks on a recording
 static constexpr double RECORD_TICK = 0.1;
-// Seconds without transcribing before the model's memory, up to a few GB,
-// is freed. Loading it again takes seconds, but it starts with the
-// recording, so it's mostly done by the time the speaker stops.
-static constexpr double UNLOAD_AFTER = 5 * 60;
 
 // Looks of the parts of a Jisho result
 static const TextStyle WORD{FL_HELVETICA_BOLD, 24};
@@ -122,8 +119,8 @@ static Fl_Button* icon_button(int x, const char* svg, const char* tooltip){
 }
 
 MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader,
-                       Capturer& capturer)
-    : settings(settings), history(history), downloader(downloader), capturer(capturer){
+                       Capturer& capturer, SharedTranscriber& transcriber)
+    : settings(settings), history(history), downloader(downloader), capturer(capturer), transcriber(transcriber){
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
 
@@ -167,10 +164,8 @@ MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDown
 
 MainWindow::~MainWindow(){
     Fl::remove_timeout(on_record_tick, this);
-    Fl::remove_timeout(on_unload_timeout, this);
     // The members then go in reverse order: transcription_thread is
-    // stopped and joined before transcriber goes, and recorder stops a
-    // recording still running
+    // stopped and joined, and recorder stops a recording still running
 }
 
 void MainWindow::on_record(){
@@ -206,7 +201,7 @@ void MainWindow::start_recording(){
     Fl::add_timeout(RECORD_TICK, on_record_tick, this);
 
     // The thread uses the model from now on
-    Fl::remove_timeout(on_unload_timeout, this);
+    transcriber.hold();
     // Loading the model alone takes seconds, so it starts now, while they
     // talk, and not on the UI thread. The thread then waits for the
     // recording, and only hands its result back through Fl::awake(). The
@@ -215,9 +210,10 @@ void MainWindow::start_recording(){
     // for the whole program.
     transcription_thread = std::jthread([this, model](std::stop_token stop){
         try {
-            transcriber.prepare(*model);
+            transcriber.prepare(*model, stop);
         } catch (const std::exception&){
-            // Reported once there's a recording: transcribe() tries again
+            // Reported once there's a recording: transcribe() tries again.
+            // Stopped, the wait below returns at once.
         }
 
         std::vector<float> samples;
@@ -275,19 +271,12 @@ void MainWindow::on_transcribed(void* data){
     // Its last act was queueing this, so joining takes no time
     self->transcription_thread.join();
     self->search_bar->record_state(RecordState::Idle);
-    Fl::add_timeout(UNLOAD_AFTER, on_unload_timeout, self);
+    self->transcriber.release();
 
     if (!result->error.empty()) fl_alert("Couldn't turn the speech into text:\n\n%s", result->error.c_str());
     // In the box to check before searching: whisper gets words wrong,
     // the small models especially
     else if (!result->text.empty()) self->search_bar->set_text(result->text);
-}
-
-void MainWindow::on_unload_timeout(void* data){
-    MainWindow* self = static_cast<MainWindow*>(data);
-    // Removed when a recording starts, and only added back once its
-    // thread is joined, so nothing else is using the model
-    self->transcriber.unload();
 }
 
 SettingsWindow& MainWindow::settings_window(){

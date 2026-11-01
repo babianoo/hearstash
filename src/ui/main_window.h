@@ -14,7 +14,6 @@
 
 #include "core/api.h"
 #include "core/jisho.h"
-#include "core/transcriber.h"
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in main_window.cpp instead.
@@ -26,6 +25,7 @@ class Recorder;
 class SearchBar;
 class SettingsStore;
 class SettingsWindow;
+class SharedTranscriber;
 class SmoothScroll;
 class WrappedText;
 class Fl_Widget;
@@ -33,8 +33,10 @@ struct TextSpan;
 
 class MainWindow {
 public:
-    // settings, history, downloader and capturer have to outlive the window
-    MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader, Capturer& capturer);
+    // settings, history, downloader, capturer and transcriber have to
+    // outlive the window
+    MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader, Capturer& capturer,
+               SharedTranscriber& transcriber);
     // Defined in main_window.cpp, where SettingsWindow, HistoryWindow and
     // Recorder are complete types, which unique_ptr needs to delete them.
     // Stops a transcription still running and waits for it, or for the
@@ -100,10 +102,9 @@ private:
     // Created the first time Record Input is picked, so a machine without
     // audio only finds out then
     std::unique_ptr<Recorder> recorder;
-    // Keeps the chosen model loaded between recordings, until
-    // UNLOAD_AFTER without one. Only the transcription thread uses it,
-    // and the UI thread to unload it while there's no such thread.
-    Transcriber transcriber;
+    // Held from the start of a recording until its text comes in, so the
+    // model stays loaded meanwhile
+    SharedTranscriber& transcriber;
     // What was recorded, handed from the UI thread to the transcription
     // thread, which waits for it once the model is loaded
     std::mutex recorded_mutex;
@@ -129,8 +130,6 @@ private:
     // Runs on the UI thread, called by Fl::awake() from the transcription
     // thread
     static void on_transcribed(void* data);
-    // UNLOAD_AFTER since the last transcription: frees the model
-    static void on_unload_timeout(void* data);
 
     // Searches for what's in the search bar, with its API
     void search();
