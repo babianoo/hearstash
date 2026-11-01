@@ -92,6 +92,7 @@ add_executable(prototype
     src/ui/history_store.cpp
     src/ui/history_table.cpp
     src/ui/history_window.cpp
+    src/ui/jisho_format.cpp
     src/ui/main_window.cpp
     src/ui/model_downloader.cpp
     src/ui/search_bar.cpp
