@@ -195,11 +195,15 @@ size_t WrappedText::offset_at(int mouse_x, int mouse_y){
     return end;
 }
 
-void WrappedText::copy_selection(int destination) const {
+std::string WrappedText::selected_text() const {
     const size_t sel_lo = std::min(sel_anchor, sel_cursor), sel_hi = std::max(sel_anchor, sel_cursor);
-    if (sel_lo == sel_hi) return;
     // Straight from full_text, so wrapped lines come out as the one line they are
-    const std::string_view selected = std::string_view(full_text).substr(sel_lo, sel_hi - sel_lo);
+    return full_text.substr(sel_lo, sel_hi - sel_lo);
+}
+
+void WrappedText::copy_selection(int destination) const {
+    const std::string selected = selected_text();
+    if (selected.empty()) return;
     if (destination == 1) clipboard_copy(selected);
     else Fl::copy(selected.data(), static_cast<int>(selected.size()), 0);
 }
@@ -255,6 +259,7 @@ int WrappedText::handle(int event){
     }
     case FL_RELEASE:
         copy_selection(0);
+        if (select_listener && Fl::event_button() == FL_LEFT_MOUSE && sel_anchor != sel_cursor) select_listener();
         return 1;
 
     case FL_FOCUS:

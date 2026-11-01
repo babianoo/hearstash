@@ -12,10 +12,12 @@
 #include <FL/Fl_Button.H>
 
 #include "core/clip_player.h"
+#include "core/lookup_text.h"
 #include "core/resample.h"
 #include "core/settings.h"
 #include "core/transcriber.h"
 #include "core/whisper_models.h"
+#include "ui/jisho_format.h"
 #include "ui/settings_store.h"
 #include "ui/shared_transcriber.h"
 #include "ui/smooth_scroll.h"
@@ -28,6 +30,8 @@ static constexpr int MARGIN = 10;
 static constexpr int WAVEFORM_H = 160;
 static constexpr int BTN_W = 90, BTN_H = 28;
 static constexpr int TRANSCRIBE_W = 130;
+// The transcript's width; the lookup panel takes the rest
+static constexpr int TRANSCRIPT_W = 360;
 // Seconds between playhead moves while playing
 static constexpr double PLAY_TICK = 1.0 / 30;
 
@@ -67,15 +71,30 @@ CaptureWindow::CaptureWindow(SettingsStore& settings, SharedTranscriber& transcr
     transcribe_btn->tooltip("Turn the selection into text (Enter)");
     transcribe_btn->callback(on_transcribe, this);
 
-    // Fills the rest of the window
-    const int transcript_y = row_y + BTN_H + MARGIN;
-    transcript = new SmoothScroll(MARGIN, transcript_y, inner_w, win.h() - transcript_y - MARGIN);
-    // Blends into the window, like the main window's results
+    // The rest of the window: the transcript on the left, then a line, then
+    // the lookup panel. Both blend into the window, like the main window's
+    // results.
+    const int panel_y = row_y + BTN_H + MARGIN, panel_h = win.h() - panel_y - MARGIN;
+    transcript = new SmoothScroll(MARGIN, panel_y, TRANSCRIPT_W, panel_h);
     transcript->box(FL_FLAT_BOX);
     transcript->color(FL_BACKGROUND_COLOR);
-    transcript_text = new WrappedText(MARGIN, transcript_y, transcript->content_w());
+    transcript_text = new WrappedText(MARGIN, panel_y, transcript->content_w());
     transcript_text->color(FL_BACKGROUND_COLOR);
+    transcript_text->on_select([this]{ look_up_selection(); });
     transcript->end();
+
+    const int line_x = MARGIN + TRANSCRIPT_W + MARGIN;
+    Fl_Box* line = new Fl_Box(line_x, panel_y, 1, panel_h);
+    line->box(FL_FLAT_BOX);
+    line->color(sidebar_color());
+
+    const int dictionary_x = line_x + 1 + MARGIN;
+    dictionary = new SmoothScroll(dictionary_x, panel_y, MARGIN + inner_w - dictionary_x, panel_h);
+    dictionary->box(FL_FLAT_BOX);
+    dictionary->color(FL_BACKGROUND_COLOR);
+    dictionary_text = new WrappedText(dictionary_x, panel_y, dictionary->content_w());
+    dictionary_text->color(FL_BACKGROUND_COLOR);
+    dictionary->end();
 
     refresh_transcribe_button();
 
@@ -103,6 +122,9 @@ void CaptureWindow::open(std::vector<float> new_audio, int new_rate, int selecti
     waveform->selection(audio.size() - selected, audio.size());
     refresh_selection();
     show_note("Press Enter to turn the selection into text, or Space to hear it first.");
+    // A lookup still running is of the text there was
+    ++latest_lookup;
+    show_lookup({});
 
     prepare_model();
 
@@ -264,7 +286,10 @@ void CaptureWindow::on_job_done(void* data){
 
     if (!result->error.empty()) self->show_note(std::format("Couldn't turn the speech into text: {}", result->error));
     else if (result->text.empty()) self->show_note("No speech found in the selection.");
-    else self->show_transcript({{result->text, TRANSCRIPT}});
+    else {
+        self->show_transcript({{result->text, TRANSCRIPT}});
+        self->show_lookup({{"Select a word in the text to look it up.", NOTE}});
+    }
 }
 
 void CaptureWindow::show_transcript(const std::vector<TextSpan>& spans){
@@ -276,6 +301,49 @@ void CaptureWindow::show_transcript(const std::vector<TextSpan>& spans){
 
 void CaptureWindow::show_note(const std::string& note){
     show_transcript({{note, NOTE}});
+}
+
+void CaptureWindow::look_up_selection(){
+    const std::string keyword = lookup_text(transcript_text->selected_text());
+    if (keyword.empty()) return;
+
+    const unsigned id = ++latest_lookup;
+    show_lookup({{std::format("Looking up {}...", keyword), NOTE}});
+
+    // Like the main window's searches: the request can take seconds, so
+    // it's made on a thread that only hands its result back. Nothing
+    // waits for it.
+    std::thread([this, id, keyword]{
+        auto* result = new LookupResult{.win = this, .id = id, .keyword = keyword};
+        try {
+            result->entries = jisho_search(keyword);
+        } catch (const std::exception& e){
+            result->error = e.what();
+        }
+        Fl::awake(on_lookup_done, result);
+    }).detach();
+}
+
+void CaptureWindow::on_lookup_done(void* data){
+    // unique_ptr so result is deleted when this returns
+    std::unique_ptr<LookupResult> result(static_cast<LookupResult*>(data));
+    CaptureWindow* self = result->win;
+    // A newer lookup started since, or the text changed
+    if (result->id != self->latest_lookup) return;
+
+    if (!result->error.empty())
+        self->show_lookup({{std::format("Couldn't look up {}: {}", result->keyword, result->error), NOTE}});
+    else if (result->entries.empty())
+        // Jisho knows dictionary forms, and only some inflected ones
+        self->show_lookup({{std::format("Nothing found for {}. Try selecting less, or the word's dictionary form.",
+                                        result->keyword), NOTE}});
+    else self->show_lookup(format_entries(result->entries));
+}
+
+void CaptureWindow::show_lookup(const std::vector<TextSpan>& spans){
+    dictionary->scroll_to_top();
+    dictionary_text->text(spans);
+    dictionary->redraw();
 }
 
 void CaptureWindow::on_close(Fl_Widget*, void* data){
@@ -295,4 +363,6 @@ void CaptureWindow::on_close(Fl_Widget*, void* data){
     self->audio.clear();
     self->audio.shrink_to_fit();
     self->show_transcript({});
+    ++self->latest_lookup;
+    self->show_lookup({});
 }

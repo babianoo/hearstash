@@ -1,6 +1,8 @@
 #pragma once
 
+#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 // FLTK
@@ -44,6 +46,12 @@ public:
     // wrapping measures the text.
     void text(const std::vector<TextSpan>& spans);
 
+    // What's selected, as one line however it's wrapped; empty if nothing
+    std::string selected_text() const;
+    // Called when the mouse button is let go after selecting something
+    // with it, e.g. to look up what was selected
+    void on_select(std::function<void()> listener) { select_listener = std::move(listener); }
+
     // Re-wraps when the width changes
     void resize(int x, int y, int w, int h) override;
 
@@ -81,6 +89,8 @@ private:
     // The selection, as byte offsets into full_text: where the drag
     // started and where the mouse is now. Equal when nothing's selected.
     size_t sel_anchor = 0, sel_cursor = 0;
+
+    std::function<void()> select_listener;
 
     void rewrap();
 

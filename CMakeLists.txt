@@ -73,6 +73,7 @@ add_executable(prototype
     src/core/deepl.cpp
     src/core/jisho.cpp
     src/core/local_time.cpp
+    src/core/lookup_text.cpp
     src/core/config_dir.cpp
     src/core/recorder.cpp
     src/core/resample.cpp
@@ -140,3 +141,8 @@ target_compile_options(resample_test PRIVATE -Wall -Wextra)
 target_include_directories(resample_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(resample_test PRIVATE miniaudio)
 add_test(NAME resample COMMAND resample_test)
+
+add_executable(lookup_text_test tests/lookup_text_test.cpp src/core/lookup_text.cpp)
+target_compile_options(lookup_text_test PRIVATE -Wall -Wextra)
+target_include_directories(lookup_text_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME lookup_text COMMAND lookup_text_test)

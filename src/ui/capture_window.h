@@ -8,6 +8,8 @@
 // FLTK
 #include <FL/Fl_Double_Window.H>
 
+#include "core/jisho.h"
+
 // Only pointers and references to these are stored here, so the full
 // headers are included in capture_window.cpp instead.
 class ClipPlayer;
@@ -25,7 +27,8 @@ struct TextSpan;
 // what the computer played, with the end already selected. The selection
 // can be changed by dragging, and played back with Space or the Play
 // button. Enter (or the Transcribe button) turns it into text with
-// whisper, shown under the waveform; Escape then cancels.
+// whisper, shown under the waveform; Escape then cancels. Selecting part
+// of the text with the mouse looks it up on Jisho, in a panel beside it.
 //
 // The whisper model starts loading as soon as a capture opens, so it's
 // mostly ready by the time the selection is.
@@ -58,6 +61,14 @@ private:
         unsigned id;
         std::jthread thread;
     };
+    // What a lookup thread hands back to the UI thread
+    struct LookupResult {
+        CaptureWindow* win;
+        unsigned id;
+        std::string keyword;
+        std::vector<JishoEntry> entries{};
+        std::string error{};    // Non-empty if it failed
+    };
     // What a job hands back to the UI thread
     struct JobResult {
         CaptureWindow* win;
@@ -84,6 +95,10 @@ private:
     // transcript's only child.
     SmoothScroll* transcript = nullptr;
     WrappedText* transcript_text = nullptr;
+    // What was selected in the transcript, looked up. dictionary_text is
+    // dictionary's only child.
+    SmoothScroll* dictionary = nullptr;
+    WrappedText* dictionary_text = nullptr;
 
     // What waveform shows; it only borrows it
     std::vector<float> audio;
@@ -97,6 +112,8 @@ private:
     unsigned next_job_id = 1;
     // The job whose transcript is awaited, or 0 if none
     unsigned transcribing = 0;
+    // Bumped on every lookup. Only the latest one's result is shown.
+    unsigned latest_lookup = 0;
 
     // Static because FLTK callbacks are plain functions; the CaptureWindow
     // comes in through data.
@@ -109,6 +126,8 @@ private:
     static void on_play_tick(void* data);
     // Runs on the UI thread, called by Fl::awake() from a job
     static void on_job_done(void* data);
+    // Runs on the UI thread, called by Fl::awake() from a lookup thread
+    static void on_lookup_done(void* data);
 
     void play();
     void stop_playing();
@@ -124,4 +143,8 @@ private:
     // Replaces what the transcript area shows
     void show_transcript(const std::vector<TextSpan>& spans);
     void show_note(const std::string& note);
+    // Looks up what's selected in the transcript, if it's worth it
+    void look_up_selection();
+    // Replaces what the lookup panel shows
+    void show_lookup(const std::vector<TextSpan>& spans);
 };
