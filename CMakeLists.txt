@@ -73,6 +73,7 @@ add_executable(prototype
     src/core/local_time.cpp
     src/core/config_dir.cpp
     src/core/recorder.cpp
+    src/core/sample_ring.cpp
     src/core/settings.cpp
     src/core/sha1.cpp
     src/core/time_ranges.cpp
@@ -116,3 +117,11 @@ if(WAYLAND_CLIENT_FOUND)
     target_link_libraries(prototype PRIVATE PkgConfig::WAYLAND_CLIENT)
     target_compile_definitions(prototype PRIVATE HAVE_WAYLAND_CLIENT)
 endif()
+
+# --- Tests: ctest --test-dir build ---
+# Plain executables for the code that doesn't need a device or a window
+enable_testing()
+add_executable(sample_ring_test tests/sample_ring_test.cpp src/core/sample_ring.cpp)
+target_compile_options(sample_ring_test PRIVATE -Wall -Wextra)
+target_include_directories(sample_ring_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME sample_ring COMMAND sample_ring_test)
