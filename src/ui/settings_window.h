@@ -31,8 +31,10 @@ struct WhisperModel;
 // page has the DeepL key, and the Speech-to-Text page the whisper models,
 // a row each to download, delete and choose one, then the microphone to
 // record from. The Buffer page has the rolling buffer of what the computer
-// plays: whether it records, how long, and whether it's recording now.
-// The General page is empty.
+// plays: whether it records, how long, whether it's recording now, and
+// the command to bind to a key to capture. The Anki page has the deck and
+// note type to add cards to, which field gets each part of a card, both
+// listed from Anki, and the picture's quality. The General page is empty.
 //
 // Changes go into the SettingsStore it was given as they're made, which
 // saves them: there's no Apply button.
@@ -82,7 +84,7 @@ private:
 
     // Owned by SettingsWindow as a member, so no new/delete anywhere.
     // Closing the window only hides it, so its settings stay as they were.
-    Fl_Double_Window win{600, 400, "Settings"};
+    Fl_Double_Window win{600, 440, "Settings"};
 
     // Created with new in the constructor and added to win, which deletes
     // them when it dies. Both are in sidebar order: categories[i] shows
@@ -118,6 +120,8 @@ private:
     Fl_Choice* note_type_choice = nullptr;
     std::array<Fl_Choice*, CARD_PART_COUNT> field_choices{};
     std::vector<std::string> deck_names, note_type_names, field_names;
+    // Applied like capacity_input
+    ClipboardInput* quality_input = nullptr;
     // Whether Anki could be reached, or why not
     Fl_Box* anki_status = nullptr;
     // The lists have been asked from Anki since the window was opened
@@ -141,6 +145,7 @@ private:
     static void on_note_type_chosen(Fl_Widget* w, void* data);
     static void on_field_chosen(Fl_Widget* w, void* data);
     static void on_anki_reload(Fl_Widget* w, void* data);
+    static void on_quality(Fl_Widget* w, void* data);
 
     // Add a page's settings to the current group, a page starting at x
     // that's w wide
@@ -178,4 +183,6 @@ private:
     void refresh_anki();
     // Lists the saved note type's fields, as of the last refresh_anki()
     void refresh_fields();
+    // Saves the picture quality typed. Does nothing if it hasn't changed.
+    void apply_quality();
 };

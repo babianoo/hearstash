@@ -69,10 +69,16 @@ struct AnkiSettings {
     std::string sentence_field;
     std::string audio_field;
     std::string picture_field;
+    // The picture's JPEG quality, from MIN_QUALITY to MAX_QUALITY: higher
+    // is sharper, but takes more space in the collection
+    int picture_quality = 85;
     // The last crop of a screenshot, as fractions of its width and height,
     // so it still fits after the resolution changes. crop_w == 0 when
     // there's none yet. The video is usually in the same place next time.
     double crop_x = 0, crop_y = 0, crop_w = 0, crop_h = 0;
+
+    static constexpr int MIN_QUALITY = 1;
+    static constexpr int MAX_QUALITY = 100;
 };
 
 struct Settings {

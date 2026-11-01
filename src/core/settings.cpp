@@ -24,7 +24,7 @@ static constexpr int VERSION = 1;
 // instead of throwing.
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AnkiSettings, deck, note_type, word_field, reading_field,
                                                 meaning_field, sentence_field, audio_field, picture_field,
-                                                crop_x, crop_y, crop_w, crop_h)
+                                                picture_quality, crop_x, crop_y, crop_w, crop_h)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)
@@ -71,6 +71,7 @@ void sanitize(Settings& settings){
 
     // A crop that doesn't fit in a screenshot is no crop
     AnkiSettings& anki = settings.anki;
+    anki.picture_quality = std::clamp(anki.picture_quality, AnkiSettings::MIN_QUALITY, AnkiSettings::MAX_QUALITY);
     const bool fits = anki.crop_x >= 0 && anki.crop_y >= 0 && anki.crop_w > 0 && anki.crop_h > 0
                    && anki.crop_x + anki.crop_w <= 1.0001 && anki.crop_y + anki.crop_h <= 1.0001;
     if (!fits) anki.crop_x = anki.crop_y = anki.crop_w = anki.crop_h = 0;

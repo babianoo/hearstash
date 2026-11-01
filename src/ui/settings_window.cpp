@@ -133,6 +133,7 @@ SettingsWindow::~SettingsWindow(){
     // outlive the window, and save it after.
     apply_capacity();
     apply_buffer_seconds();
+    apply_quality();
     history.remove_listener(history_listener);
     downloader.remove_listener(downloader_listener);
     settings.remove_listener(settings_listener);
@@ -210,6 +211,7 @@ void SettingsWindow::on_close(Fl_Widget*, void* data){
     // Typed but not applied yet: closing is done with it too
     self->apply_capacity();
     self->apply_buffer_seconds();
+    self->apply_quality();
     self->win.hide();
 }
 
@@ -354,9 +356,11 @@ void SettingsWindow::on_category(Fl_Widget* w, void* data){
 }
 
 void SettingsWindow::select(size_t i){
-    // Leaving the History or Buffer page is done with it too. The box
-    // keeps focus while hidden, so it wouldn't hear about it otherwise.
+    // Leaving the History, Buffer or Anki page is done with it too. The
+    // box keeps focus while hidden, so it wouldn't hear about it otherwise.
     apply_capacity();
+    apply_buffer_seconds();
+    apply_quality();
     // Already done when the category was clicked, but not when it's
     // selected from code
     categories[i]->setonly();
@@ -710,7 +714,26 @@ void SettingsWindow::add_anki_settings(int x, int w){
         field_choices[i]->callback(on_field_chosen, this);
         y += ROW_H;
     }
-    y += 4;
+
+    // Under the Picture field, which it's about
+    constexpr int LABEL_W = 90;
+    Fl_Box* quality_label = new Fl_Box(left, y, LABEL_W, PILL_H, "Quality");
+    quality_label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    quality_input = new ClipboardInput(left + LABEL_W, y, CAPACITY_W, PILL_H);
+    quality_input->type(FL_INT_INPUT);
+    quality_input->value(settings.get().anki.picture_quality);
+    // Like the capacity, only on Enter or leaving the box
+    quality_input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
+    quality_input->callback(on_quality, this);
+    const int note_x = left + LABEL_W + CAPACITY_W + 10;
+    Fl_Box* quality_note = new Fl_Box(note_x, y, right - note_x, PILL_H);
+    quality_note->copy_label(std::format("From {} to {}. Higher is sharper.",
+                                         AnkiSettings::MIN_QUALITY, AnkiSettings::MAX_QUALITY).c_str());
+    quality_input->tooltip("The picture's JPEG quality. Higher is sharper, but takes more space in Anki.");
+    quality_note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    quality_note->labelsize(12);
+    quality_note->labelcolor(DIM);
+    y += ROW_H + 4;
 
     auto* reload = new Fl_Button(left, y, CLEAR_BTN_W, MODEL_BTN_H, "Ask Anki again");
     reload->box(FL_ROUND_UP_BOX);
@@ -828,4 +851,21 @@ void SettingsWindow::on_field_chosen(Fl_Widget* w, void* data){
 
 void SettingsWindow::on_anki_reload(Fl_Widget*, void* data){
     static_cast<SettingsWindow*>(data)->refresh_anki();
+}
+
+void SettingsWindow::on_quality(Fl_Widget*, void* data){
+    static_cast<SettingsWindow*>(data)->apply_quality();
+}
+
+void SettingsWindow::apply_quality(){
+    // Empty, or not a number: put back as it was
+    int quality = settings.get().anki.picture_quality;
+    try {
+        quality = std::stoi(quality_input->value());
+    } catch (const std::exception&){}
+
+    if (quality != settings.get().anki.picture_quality)
+        settings.update([quality](Settings& s){ s.anki.picture_quality = quality; });
+    // Clamped by update(), and shown that way
+    quality_input->value(settings.get().anki.picture_quality);
 }

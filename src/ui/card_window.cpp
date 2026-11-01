@@ -31,7 +31,6 @@ static constexpr int CROP_H = 330;
 // Pictures on cards are no taller than this, which keeps the collection
 // small and is plenty on a phone
 static constexpr int PICTURE_MAX_H = 480;
-static constexpr int JPEG_QUALITY = 85;
 // Every card the app adds gets it, so they can be found in Anki
 static constexpr const char* TAG = "prototype";
 
@@ -181,7 +180,7 @@ void CardWindow::add(){
         if (!anki.picture_field.empty() && !draft.screenshot.empty()){
             card.picture_file = std::format("{}_{}.jpg", TAG, stamp);
             const Image picture = shrink_to_height(crop(draft.screenshot, crop_view->crop()), PICTURE_MAX_H);
-            anki_store_media(card.picture_file, encode_jpeg(picture, JPEG_QUALITY));
+            anki_store_media(card.picture_file, encode_jpeg(picture, anki.picture_quality));
         }
         anki_add_note({.deck = anki.deck, .model = anki.note_type, .fields = format_card(card, anki), .tags = {TAG}});
         win.cursor(FL_CURSOR_DEFAULT);
