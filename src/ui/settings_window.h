@@ -1,10 +1,13 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <vector>
 
 // FLTK
 #include <FL/Fl_Double_Window.H>
+
+#include "core/anki_fields.h"
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in settings_window.cpp instead.
@@ -109,6 +112,16 @@ private:
     Fl_Box* buffer_status = nullptr;
     // Why the capture shortcut can't be received, if it can't
     Fl_Box* hotkey_status = nullptr;
+    // On the Anki page. The names are what each item of the dropdowns
+    // saves; a field's dropdown starts with "(none)", which saves "".
+    Fl_Choice* deck_choice = nullptr;
+    Fl_Choice* note_type_choice = nullptr;
+    std::array<Fl_Choice*, CARD_PART_COUNT> field_choices{};
+    std::vector<std::string> deck_names, note_type_names, field_names;
+    // Whether Anki could be reached, or why not
+    Fl_Box* anki_status = nullptr;
+    // The lists have been asked from Anki since the window was opened
+    bool anki_listed = false;
 
     // Static because FLTK callbacks are plain functions; the
     // SettingsWindow comes in through data.
@@ -124,6 +137,10 @@ private:
     static void on_mic_chosen(Fl_Widget* w, void* data);
     static void on_buffer_enabled(Fl_Widget* w, void* data);
     static void on_buffer_seconds(Fl_Widget* w, void* data);
+    static void on_deck_chosen(Fl_Widget* w, void* data);
+    static void on_note_type_chosen(Fl_Widget* w, void* data);
+    static void on_field_chosen(Fl_Widget* w, void* data);
+    static void on_anki_reload(Fl_Widget* w, void* data);
 
     // Add a page's settings to the current group, a page starting at x
     // that's w wide
@@ -131,6 +148,7 @@ private:
     void add_api_settings(int x, int w);
     void add_speech_settings(int x, int w);
     void add_buffer_settings(int x, int w);
+    void add_anki_settings(int x, int w);
     void select(size_t i);
     // Shows how many searches there are, which changes with every search
     void refresh_history();
@@ -154,4 +172,10 @@ private:
     // Shows whether the buffer is recording, which also changes when the
     // audio system comes or goes
     void refresh_buffer();
+    // Lists the decks, note types and fields from Anki, with the saved
+    // ones selected. If Anki can't be reached, only the saved ones are
+    // listed, and anki_status says why.
+    void refresh_anki();
+    // Lists the saved note type's fields, as of the last refresh_anki()
+    void refresh_fields();
 };

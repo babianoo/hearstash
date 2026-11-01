@@ -9,6 +9,7 @@
 #include <FL/fl_ask.H>
 
 #include "core/audio_buffer.h"
+#include "core/screenshot.h"
 #include "core/settings.h"
 #include "ui/capture_window.h"
 #include "ui/global_hotkey.h"
@@ -93,6 +94,19 @@ void Capturer::capture(){
             fl_alert("Nothing to capture: the buffer isn't recording.\n\n%s", error_.c_str());
         return;
     }
+    // The audio first, since the screenshot takes a tenth of a second.
+    // Both before the window opens and covers anything.
+    std::vector<float> audio = buffer->snapshot();
+    Image screenshot;
+    std::string screenshot_error;
+    try {
+        screenshot = take_screenshot();
+    } catch (const std::exception& e){
+        // Only needed for a card, which says so
+        screenshot_error = e.what();
+    }
+
     if (!capture_win) capture_win = std::make_unique<CaptureWindow>(settings, transcriber);
-    capture_win->open(buffer->snapshot(), AudioBuffer::SAMPLE_RATE, settings.get().buffer.selection_seconds);
+    capture_win->open(std::move(audio), AudioBuffer::SAMPLE_RATE, settings.get().buffer.selection_seconds,
+                      std::move(screenshot), std::move(screenshot_error));
 }

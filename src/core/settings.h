@@ -7,9 +7,9 @@
 // as JSON. Grouped like the window's categories, each group an object in
 // the file:
 //
-//   {"api": {"deepl_key": "..."}, "buffer": {"seconds": 30},
-//    "history": {"capacity": 100}, "speech": {"whisper_model": "small"},
-//    "version": 1}
+//   {"anki": {"deck": "Mining"}, "api": {"deepl_key": "..."},
+//    "buffer": {"seconds": 30}, "history": {"capacity": 100},
+//    "speech": {"whisper_model": "small"}, "version": 1}
 //
 // The field names are the JSON keys, so renaming one changes the file
 // format. A field's default is what it gets when the file doesn't have it.
@@ -56,7 +56,27 @@ struct BufferSettings {
     static constexpr int MAX_SECONDS = 120;
 };
 
+// The Anki category: where captures are added as cards
+struct AnkiSettings {
+    // As Anki names them. Empty when none is chosen.
+    std::string deck;
+    std::string note_type;
+    // The fields of note_type that get each part of a card. Empty for one
+    // that goes nowhere.
+    std::string word_field;
+    std::string reading_field;
+    std::string meaning_field;
+    std::string sentence_field;
+    std::string audio_field;
+    std::string picture_field;
+    // The last crop of a screenshot, as fractions of its width and height,
+    // so it still fits after the resolution changes. crop_w == 0 when
+    // there's none yet. The video is usually in the same place next time.
+    double crop_x = 0, crop_y = 0, crop_w = 0, crop_h = 0;
+};
+
 struct Settings {
+    AnkiSettings anki;
     ApiSettings api;
     BufferSettings buffer;
     HistorySettings history;

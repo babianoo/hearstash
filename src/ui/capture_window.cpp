@@ -17,6 +17,7 @@
 #include "core/settings.h"
 #include "core/transcriber.h"
 #include "core/whisper_models.h"
+#include "ui/card_window.h"
 #include "ui/jisho_format.h"
 #include "ui/settings_store.h"
 #include "ui/shared_transcriber.h"
@@ -30,6 +31,7 @@ static constexpr int MARGIN = 10;
 static constexpr int WAVEFORM_H = 160;
 static constexpr int BTN_W = 90, BTN_H = 28;
 static constexpr int TRANSCRIBE_W = 130;
+static constexpr int ANKI_W = 120;
 // The transcript's width; the lookup panel takes the rest
 static constexpr int TRANSCRIPT_W = 360;
 // Seconds between playhead moves while playing
@@ -60,7 +62,8 @@ CaptureWindow::CaptureWindow(SettingsStore& settings, SharedTranscriber& transcr
     play_btn->callback(on_play, this);
 
     const int transcribe_x = MARGIN + inner_w - TRANSCRIBE_W;
-    selection_info = new Fl_Box(MARGIN + BTN_W + MARGIN, row_y, transcribe_x - BTN_W - 3 * MARGIN, BTN_H);
+    const int anki_x = transcribe_x - MARGIN - ANKI_W;
+    selection_info = new Fl_Box(MARGIN + BTN_W + MARGIN, row_y, anki_x - BTN_W - 3 * MARGIN, BTN_H);
     selection_info->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     selection_info->labelcolor(DIM);
 
@@ -70,6 +73,13 @@ CaptureWindow::CaptureWindow(SettingsStore& settings, SharedTranscriber& transcr
     transcribe_btn->shortcut(FL_Enter);
     transcribe_btn->tooltip("Turn the selection into text (Enter)");
     transcribe_btn->callback(on_transcribe, this);
+
+    anki_btn = new Fl_Button(anki_x, row_y, ANKI_W, BTN_H, "Add to Anki");
+    anki_btn->box(FL_ROUND_UP_BOX);
+    anki_btn->clear_visible_focus();
+    anki_btn->tooltip("Make a card of the word looked up and this line (Ctrl+N)");
+    anki_btn->shortcut(FL_CTRL | 'n');
+    anki_btn->callback(on_add_to_anki, this);
 
     // The rest of the window: the transcript on the left, then a line, then
     // the lookup panel. Both blend into the window, like the main window's
@@ -110,10 +120,15 @@ CaptureWindow::~CaptureWindow(){
     // Their results are never handled: Fl::run() has returned by now.
 }
 
-void CaptureWindow::open(std::vector<float> new_audio, int new_rate, int selection_seconds){
+void CaptureWindow::open(std::vector<float> new_audio, int new_rate, int selection_seconds, Image new_screenshot,
+                         std::string new_screenshot_error){
     stop_playing();
     // Its text would be of the capture there was
     cancel_transcription();
+    screenshot = std::move(new_screenshot);
+    screenshot_error = std::move(new_screenshot_error);
+    transcript_shown.clear();
+    entry_shown.reset();
 
     audio = std::move(new_audio);
     rate = new_rate;
@@ -152,6 +167,9 @@ void CaptureWindow::refresh_transcribe_button(){
     transcribe_btn->label(transcribing ? "Transcribing..." : "Transcribe");
     if (transcribing || begin == end) transcribe_btn->deactivate();
     else transcribe_btn->activate();
+    // A card needs something to show on its front
+    if (transcript_shown.empty() || begin == end) anki_btn->deactivate();
+    else anki_btn->activate();
 }
 
 void CaptureWindow::on_play(Fl_Widget*, void* data){
@@ -235,6 +253,10 @@ void CaptureWindow::transcribe(){
 
     const unsigned id = next_job_id++;
     transcribing = id;
+    transcript_shown.clear();
+    entry_shown.reset();
+    ++latest_lookup;
+    show_lookup({});
     refresh_transcribe_button();
     show_note("Transcribing...");
 
@@ -288,8 +310,12 @@ void CaptureWindow::on_job_done(void* data){
     else if (result->text.empty()) self->show_note("No speech found in the selection.");
     else {
         self->show_transcript({{result->text, TRANSCRIPT}});
+        self->transcript_shown = result->text;
+        self->entry_shown.reset();
+        ++self->latest_lookup;
         self->show_lookup({{"Select a word in the text to look it up.", NOTE}});
     }
+    self->refresh_transcribe_button();
 }
 
 void CaptureWindow::show_transcript(const std::vector<TextSpan>& spans){
@@ -331,6 +357,10 @@ void CaptureWindow::on_lookup_done(void* data){
     // A newer lookup started since, or the text changed
     if (result->id != self->latest_lookup) return;
 
+    self->keyword_shown = result->keyword;
+    if (result->entries.empty()) self->entry_shown.reset();
+    else self->entry_shown.emplace(result->entries.front());
+
     if (!result->error.empty())
         self->show_lookup({{std::format("Couldn't look up {}: {}", result->keyword, result->error), NOTE}});
     else if (result->entries.empty())
@@ -344,6 +374,49 @@ void CaptureWindow::show_lookup(const std::vector<TextSpan>& spans){
     dictionary->scroll_to_top();
     dictionary_text->text(spans);
     dictionary->redraw();
+}
+
+void CaptureWindow::on_add_to_anki(Fl_Widget*, void* data){
+    static_cast<CaptureWindow*>(data)->add_to_anki();
+}
+
+// A dictionary entry's meanings, one numbered line each
+static std::string meanings(const JishoEntry& entry){
+    std::string text;
+    int n = 1;
+    for (const JishoSense& sense : entry.senses){
+        if (!text.empty()) text += '\n';
+        text += std::format("{}. ", n++);
+        for (size_t i = 0; i < sense.definitions.size(); ++i){
+            if (i > 0) text += "; ";
+            text += sense.definitions[i];
+        }
+    }
+    return text;
+}
+
+void CaptureWindow::add_to_anki(){
+    const auto [begin, end] = waveform->selection();
+    if (transcript_shown.empty() || begin == end) return;
+    stop_playing();
+
+    CardDraft draft;
+    draft.sentence = transcript_shown;
+    if (entry_shown && !entry_shown->forms.empty()){
+        // Kana-only words have just the reading, which then is the word
+        const JishoForm& form = entry_shown->forms.front();
+        draft.word = form.word.empty() ? form.reading : form.word;
+        draft.reading = form.reading;
+        draft.meaning = meanings(*entry_shown);
+    }
+    draft.audio.assign(audio.begin() + static_cast<std::ptrdiff_t>(begin), audio.begin() + static_cast<std::ptrdiff_t>(end));
+    draft.rate = rate;
+    // A copy: more than one card can be made from a capture
+    draft.screenshot = screenshot;
+    draft.screenshot_error = screenshot_error;
+
+    if (!card_win) card_win = std::make_unique<CardWindow>(settings);
+    card_win->open(std::move(draft));
 }
 
 void CaptureWindow::on_close(Fl_Widget*, void* data){
@@ -362,6 +435,9 @@ void CaptureWindow::on_close(Fl_Widget*, void* data){
     self->waveform->audio({}, self->rate);
     self->audio.clear();
     self->audio.shrink_to_fit();
+    self->screenshot = {};
+    self->transcript_shown.clear();
+    self->entry_shown.reset();
     self->show_transcript({});
     ++self->latest_lookup;
     self->show_lookup({});

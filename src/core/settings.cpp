@@ -22,11 +22,14 @@ static constexpr int VERSION = 1;
 // get<Settings>() use. A field is only saved if it's listed here.
 // _WITH_DEFAULT: a key the file doesn't have keeps the field's default
 // instead of throwing.
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AnkiSettings, deck, note_type, word_field, reading_field,
+                                                meaning_field, sentence_field, audio_field, picture_field,
+                                                crop_x, crop_y, crop_w, crop_h)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model, input_device)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, api, buffer, history, speech)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, anki, api, buffer, history, speech)
 
 Settings load_settings(const fs::path& file){
     std::ifstream in(file);
@@ -65,6 +68,12 @@ void sanitize(Settings& settings){
     BufferSettings& buffer = settings.buffer;
     buffer.seconds = std::clamp(buffer.seconds, BufferSettings::MIN_SECONDS, BufferSettings::MAX_SECONDS);
     buffer.selection_seconds = std::clamp(buffer.selection_seconds, 1, buffer.seconds);
+
+    // A crop that doesn't fit in a screenshot is no crop
+    AnkiSettings& anki = settings.anki;
+    const bool fits = anki.crop_x >= 0 && anki.crop_y >= 0 && anki.crop_w > 0 && anki.crop_h > 0
+                   && anki.crop_x + anki.crop_w <= 1.0001 && anki.crop_y + anki.crop_h <= 1.0001;
+    if (!fits) anki.crop_x = anki.crop_y = anki.crop_w = anki.crop_h = 0;
 
     // An id the app doesn't offer, e.g. one a version with other models
     // saved, or a typo in the file. Clearing it means nothing has to check

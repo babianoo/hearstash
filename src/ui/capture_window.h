@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -8,10 +9,12 @@
 // FLTK
 #include <FL/Fl_Double_Window.H>
 
+#include "core/image.h"
 #include "core/jisho.h"
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in capture_window.cpp instead.
+class CardWindow;
 class ClipPlayer;
 class SettingsStore;
 class SharedTranscriber;
@@ -39,9 +42,9 @@ class CaptureWindow {
 public:
     // settings and transcriber have to outlive the window
     CaptureWindow(SettingsStore& settings, SharedTranscriber& transcriber);
-    // Defined in capture_window.cpp, where ClipPlayer is complete, which
-    // unique_ptr needs to delete it. Stops the threads still running and
-    // waits for them.
+    // Defined in capture_window.cpp, where ClipPlayer and CardWindow are
+    // complete, which unique_ptr needs to delete them. Stops the threads
+    // still running and waits for them.
     ~CaptureWindow();
 
     // One capture window per app: copying makes no sense
@@ -51,7 +54,10 @@ public:
     // Shows audio, rate a second, in place of the capture there was, with
     // the last selection_seconds of it selected, and brings the window to
     // the front. Cancels a transcription of the capture there was.
-    void open(std::vector<float> audio, int rate, int selection_seconds);
+    // screenshot is kept for the card; if it's empty, screenshot_error
+    // says why.
+    void open(std::vector<float> audio, int rate, int selection_seconds, Image screenshot,
+              std::string screenshot_error);
 
 private:
     // A thread that loads the model or transcribes. Each one hands its
@@ -91,6 +97,7 @@ private:
     // How long the selection is
     Fl_Box* selection_info = nullptr;
     Fl_Button* transcribe_btn = nullptr;
+    Fl_Button* anki_btn = nullptr;
     // The transcript, or what to do to get one. transcript_text is
     // transcript's only child.
     SmoothScroll* transcript = nullptr;
@@ -106,6 +113,16 @@ private:
     // Created on the first play, so a machine without audio output only
     // finds out then
     std::unique_ptr<ClipPlayer> player;
+    Image screenshot;
+    std::string screenshot_error;
+    // The transcript shown, and the first entry of the lookup shown, if
+    // any, for a card
+    std::string transcript_shown;
+    std::optional<JishoEntry> entry_shown;
+    std::string keyword_shown;
+    // Created the first time a card is added. Not a plain member: a window
+    // created in this one's constructor would end up inside it.
+    std::unique_ptr<CardWindow> card_win;
 
     // Running, or done and not joined yet. Usually one or two.
     std::vector<Job> jobs;
@@ -119,6 +136,7 @@ private:
     // comes in through data.
     static void on_play(Fl_Widget* w, void* data);
     static void on_transcribe(Fl_Widget* w, void* data);
+    static void on_add_to_anki(Fl_Widget* w, void* data);
     // The window's close button and Escape
     static void on_close(Fl_Widget* w, void* data);
     // Many times a second while playing: moves the playhead, and notices
@@ -138,8 +156,10 @@ private:
     void transcribe();
     // Stops waiting for the transcript there is, if there is one
     void cancel_transcription();
-    // Shows the Transcribe button as it should be now
+    // Shows the Transcribe and Add to Anki buttons as they should be now
     void refresh_transcribe_button();
+    // Opens the card window with what's shown
+    void add_to_anki();
     // Replaces what the transcript area shows
     void show_transcript(const std::vector<TextSpan>& spans);
     void show_note(const std::string& note);

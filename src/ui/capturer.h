@@ -40,7 +40,8 @@ public:
     // Why the capture shortcut can't be received. Empty if it can.
     const std::string& hotkey_error() const { return hotkey_error_; }
 
-    // Opens the last seconds in the capture window, as the shortcut does
+    // Opens the last seconds in the capture window, with a screenshot
+    // taken now, as the shortcut does
     void capture();
 
 private:

@@ -17,6 +17,7 @@
 #include <FL/Fl_Round_Button.H>
 #include <FL/Fl_SVG_Image.H>
 
+#include "core/anki_connect.h"
 #include "core/recorder.h"
 #include "core/settings.h"
 #include "core/whisper_models.h"
@@ -31,10 +32,10 @@
 #include "ui/theme.h"
 
 // Same categories as japanese-helper, in sidebar order, then the rolling
-// buffer's
-static constexpr const char* CATEGORY_NAMES[] = {"General", "History", "API", "Speech-to-Text", "Buffer"};
+// buffer's and Anki's
+static constexpr const char* CATEGORY_NAMES[] = {"General", "History", "API", "Speech-to-Text", "Buffer", "Anki"};
 // Indexes into CATEGORY_NAMES
-enum Category : size_t { GENERAL, HISTORY, API, SPEECH_TO_TEXT, BUFFER };
+enum Category : size_t { GENERAL, HISTORY, API, SPEECH_TO_TEXT, BUFFER, ANKI };
 
 static constexpr int SIDEBAR_W = 160;
 static constexpr int CATEGORY_H = 36;
@@ -53,6 +54,28 @@ static constexpr int MODEL_STATUS_W = 110;
 // enough for 1000, and the button that clears them
 static constexpr int CAPACITY_W = 80;
 static constexpr int CLEAR_BTN_W = 120;
+
+// Replaces choice's items with labels, and selects item selected
+static void set_items(Fl_Choice& choice, const std::vector<std::string>& labels, int selected){
+    choice.clear();
+    for (size_t i = 0; i < labels.size(); ++i){
+        // add() reads '/', '&', '\' and more in a label as menu syntax,
+        // and a device or deck name can have them. So each is added as a
+        // unique placeholder (add() replaces an item with the same label),
+        // then replace() sets the text as it is. Only '&' still means
+        // something when drawn, underlining the next letter, so it's
+        // doubled.
+        const int index = choice.add(std::format("item{}", i).c_str());
+        std::string text;
+        for (char c : labels[i]){
+            text += c;
+            if (c == '&') text += '&';
+        }
+        choice.replace(index, text.c_str());
+    }
+    choice.value(selected);
+    choice.redraw();
+}
 
 // Where model is in WHISPER_MODELS, and so in model_rows
 static size_t index_of(const WhisperModel& model){
@@ -83,6 +106,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
         if (i == API) add_api_settings(page_x, page_w);
         if (i == SPEECH_TO_TEXT) add_speech_settings(page_x, page_w);
         if (i == BUFFER) add_buffer_settings(page_x, page_w);
+        if (i == ANKI) add_anki_settings(page_x, page_w);
 
         page->end();
         page->hide();    // Shown by select()
@@ -312,6 +336,9 @@ void SettingsWindow::show(){
     refresh_models();
     refresh_microphones();
     refresh_buffer();
+    // Decks may have been added in Anki meanwhile
+    anki_listed = false;
+    if (pages[ANKI]->visible()) refresh_anki();
     win.show();
 }
 
@@ -337,6 +364,9 @@ void SettingsWindow::select(size_t i){
         if (p == i) pages[p]->show();
         else pages[p]->hide();
     }
+    // Asked when the page is first looked at, not every time the window
+    // opens: it's only needed here
+    if (i == ANKI && !anki_listed) refresh_anki();
 }
 
 void SettingsWindow::on_key_changed(Fl_Widget*, void* data){
@@ -497,28 +527,14 @@ void SettingsWindow::refresh_microphones(){
     const bool saved_missing = !saved.empty() && std::ranges::find(plugged_in, saved) == plugged_in.end();
     if (saved_missing) mic_names.push_back(saved);
 
-    mic_choice->clear();
+    std::vector<std::string> labels;
     for (size_t i = 0; i < mic_names.size(); ++i){
         std::string label = i == 0 ? "Default" : mic_names[i];
         if (saved_missing && i == mic_names.size() - 1) label += " (not plugged in)";
-
-        // add() reads '/', '&', '\' and more in a label as menu syntax,
-        // and a device name can have them. So each is added as a unique
-        // placeholder (add() replaces an item with the same label), then
-        // replace() sets the text as it is. Only '&' still means something
-        // when drawn, underlining the next letter, so it's doubled.
-        const int index = mic_choice->add(std::format("item{}", i).c_str());
-        std::string text;
-        for (char c : label){
-            text += c;
-            if (c == '&') text += '&';
-        }
-        mic_choice->replace(index, text.c_str());
+        labels.push_back(std::move(label));
     }
-
     const auto selected = std::ranges::find(mic_names, saved);
-    mic_choice->value(static_cast<int>(selected - mic_names.begin()));
-    mic_choice->redraw();
+    set_items(*mic_choice, labels, static_cast<int>(selected - mic_names.begin()));
 }
 
 // A label over a box for a number of seconds, with a note right of the box
@@ -656,4 +672,160 @@ void SettingsWindow::refresh_buffer(){
         hotkey_status->copy_label(capturer.hotkey_error().c_str());
         hotkey_status->redraw();
     }
+}
+
+// A label on the left, and a dropdown filling the rest of the row
+static Fl_Choice* labelled_choice(int left, int y, int w, const char* label_text){
+    constexpr int LABEL_W = 90;
+    Fl_Box* label = new Fl_Box(left, y, LABEL_W, PILL_H, label_text);
+    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    auto* choice = new Fl_Choice(left + LABEL_W, y, w - LABEL_W, PILL_H);
+    choice->clear_visible_focus();
+    return choice;
+}
+
+// The deck and note type, then a dropdown per part of a card for the field
+// it goes in, then a button that asks Anki again and whether it answered
+void SettingsWindow::add_anki_settings(int x, int w){
+    const int left = x + MARGIN, right = x + w - MARGIN;
+    constexpr int ROW_H = PILL_H + 4;
+    // Lines up with the first category in the sidebar, like the API page
+    int y = MARGIN + (CATEGORY_H - PILL_H) / 2;
+
+    deck_choice = labelled_choice(left, y, right - left, "Deck");
+    deck_choice->callback(on_deck_chosen, this);
+    y += ROW_H;
+    note_type_choice = labelled_choice(left, y, right - left, "Note type");
+    note_type_choice->callback(on_note_type_chosen, this);
+    y += ROW_H + 6;
+
+    Fl_Box* note = new Fl_Box(left, y, right - left, 18, "Which field of the note type gets each part of a card:");
+    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    note->labelsize(12);
+    note->labelcolor(DIM);
+    y += note->h() + 2;
+
+    for (size_t i = 0; i < CARD_PART_COUNT; ++i){
+        field_choices[i] = labelled_choice(left, y, right - left, CARD_PART_NAMES[i]);
+        field_choices[i]->callback(on_field_chosen, this);
+        y += ROW_H;
+    }
+    y += 4;
+
+    auto* reload = new Fl_Button(left, y, CLEAR_BTN_W, MODEL_BTN_H, "Ask Anki again");
+    reload->box(FL_ROUND_UP_BOX);
+    reload->clear_visible_focus();
+    reload->callback(on_anki_reload, this);
+
+    // Under the button, since an error can take two lines
+    y += MODEL_BTN_H + 4;
+    anki_status = new Fl_Box(left, y, right - left, win.h() - y - 4);
+    anki_status->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+    anki_status->labelsize(12);
+}
+
+// Lists names in choice with saved selected. saved stays in the list even
+// if names doesn't have it, e.g. Anki isn't open, so the choice isn't lost.
+// With none_label, the first item is that and saves "". Returns what each
+// item saves.
+static std::vector<std::string> list_names(Fl_Choice& choice, std::vector<std::string> names,
+                                           const std::string& saved, const char* none_label){
+    if (!saved.empty() && std::ranges::find(names, saved) == names.end()) names.push_back(saved);
+    if (none_label) names.insert(names.begin(), "");
+
+    std::vector<std::string> labels = names;
+    if (none_label) labels.front() = none_label;
+    const auto selected = std::ranges::find(names, saved);
+    set_items(choice, labels, selected == names.end() ? -1 : static_cast<int>(selected - names.begin()));
+    return names;
+}
+
+void SettingsWindow::refresh_anki(){
+    const AnkiSettings& saved = settings.get().anki;
+    std::vector<std::string> decks, note_types;
+    // Blocks until Anki answers, which is quick: it's on this machine, and
+    // when it isn't open the connection is refused at once
+    try {
+        decks = anki_deck_names();
+        note_types = anki_model_names();
+        anki_status->copy_label("Connected to Anki.");
+        anki_status->labelcolor(DIM);
+    } catch (const std::exception& e){
+        anki_status->copy_label(e.what());
+        anki_status->labelcolor(ERROR_COLOR);
+    }
+    anki_status->redraw();
+    anki_listed = true;
+
+    deck_names = list_names(*deck_choice, decks, saved.deck, nullptr);
+    note_type_names = list_names(*note_type_choice, note_types, saved.note_type, nullptr);
+    field_names.clear();
+    if (!saved.note_type.empty() && std::ranges::find(note_types, saved.note_type) != note_types.end()){
+        try {
+            field_names = anki_model_field_names(saved.note_type);
+        } catch (const std::exception&){
+            // Only the saved ones are listed then
+        }
+    }
+    refresh_fields();
+}
+
+void SettingsWindow::refresh_fields(){
+    const AnkiSettings& saved = settings.get().anki;
+    for (size_t i = 0; i < CARD_PART_COUNT; ++i){
+        const std::string& field = field_for(saved, static_cast<CardPart>(i));
+        list_names(*field_choices[i], field_names, field, "(none)");
+    }
+}
+
+void SettingsWindow::on_deck_chosen(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const int i = self->deck_choice->value();
+    if (i < 0 || i >= static_cast<int>(self->deck_names.size())) return;
+    const std::string deck = self->deck_names[static_cast<size_t>(i)];
+    self->settings.update([&deck](Settings& s){ s.anki.deck = deck; });
+}
+
+void SettingsWindow::on_note_type_chosen(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const int i = self->note_type_choice->value();
+    if (i < 0 || i >= static_cast<int>(self->note_type_names.size())) return;
+    const std::string note_type = self->note_type_names[static_cast<size_t>(i)];
+    if (note_type == self->settings.get().anki.note_type) return;
+
+    try {
+        self->field_names = anki_model_field_names(note_type);
+    } catch (const std::exception& e){
+        self->field_names.clear();
+        fl_alert("Couldn't list the note type's fields:\n\n%s", e.what());
+    }
+    // The old note type's fields mean nothing in this one, so each part
+    // goes where its name fits best, to be checked and changed
+    const auto guesses = guess_fields(self->field_names);
+    self->settings.update([&](Settings& s){
+        s.anki.note_type = note_type;
+        for (size_t p = 0; p < CARD_PART_COUNT; ++p) field_for(s.anki, static_cast<CardPart>(p)) = guesses[p];
+    });
+    self->refresh_fields();
+}
+
+void SettingsWindow::on_field_chosen(Fl_Widget* w, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const auto part = static_cast<size_t>(std::ranges::find(self->field_choices, w) - self->field_choices.begin());
+    auto* choice = static_cast<Fl_Choice*>(w);
+    const int i = choice->value();
+    // The items are as list_names made them: "(none)", then field_names,
+    // then maybe a saved field the note type doesn't have
+    std::vector<std::string> names = self->field_names;
+    names.insert(names.begin(), "");
+    const std::string& saved = field_for(self->settings.get().anki, static_cast<CardPart>(part));
+    if (!saved.empty() && std::ranges::find(names, saved) == names.end()) names.push_back(saved);
+    if (i < 0 || i >= static_cast<int>(names.size())) return;
+
+    const std::string field = names[static_cast<size_t>(i)];
+    self->settings.update([&](Settings& s){ field_for(s.anki, static_cast<CardPart>(part)) = field; });
+}
+
+void SettingsWindow::on_anki_reload(Fl_Widget*, void* data){
+    static_cast<SettingsWindow*>(data)->refresh_anki();
 }

@@ -67,6 +67,8 @@ endif()
 # Add new source files here, by path from the project root.
 add_executable(prototype
     src/main.cpp
+    src/core/anki_connect.cpp
+    src/core/anki_fields.cpp
     src/core/atomic_write.cpp
     src/core/audio_buffer.cpp
     src/core/bad_file.cpp
@@ -78,6 +80,7 @@ add_executable(prototype
     src/core/jisho.cpp
     src/core/local_time.cpp
     src/core/lookup_text.cpp
+    src/core/media_encoding.cpp
     src/core/config_dir.cpp
     src/core/recorder.cpp
     src/core/resample.cpp
@@ -89,6 +92,7 @@ add_executable(prototype
     src/core/transcriber.cpp
     src/core/whisper_models.cpp
     src/ui/capture_window.cpp
+    src/ui/card_window.cpp
     src/ui/capturer.cpp
     src/ui/category_button.cpp
     src/ui/clipboard.cpp
@@ -159,3 +163,13 @@ target_compile_options(image_test PRIVATE -Wall -Wextra)
 target_include_directories(image_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(image_test PRIVATE JPEG::JPEG nlohmann_json::nlohmann_json)
 add_test(NAME image COMMAND image_test)
+
+add_executable(media_encoding_test tests/media_encoding_test.cpp src/core/media_encoding.cpp)
+target_compile_options(media_encoding_test PRIVATE -Wall -Wextra)
+target_include_directories(media_encoding_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME media_encoding COMMAND media_encoding_test)
+
+add_executable(anki_fields_test tests/anki_fields_test.cpp src/core/anki_fields.cpp)
+target_compile_options(anki_fields_test PRIVATE -Wall -Wextra)
+target_include_directories(anki_fields_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME anki_fields COMMAND anki_fields_test)
