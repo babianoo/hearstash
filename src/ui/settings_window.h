@@ -8,12 +8,14 @@
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in settings_window.cpp instead.
+class Capturer;
 class ClipboardInput;
 class HistoryStore;
 class ModelDownloader;
 class SettingsStore;
 class Fl_Box;
 class Fl_Button;
+class Fl_Check_Button;
 class Fl_Choice;
 class Fl_Group;
 class Fl_Progress;
@@ -25,14 +27,17 @@ struct WhisperModel;
 // many searches the history keeps, and a button that clears it. The API
 // page has the DeepL key, and the Speech-to-Text page the whisper models,
 // a row each to download, delete and choose one, then the microphone to
-// record from. The General page is empty.
+// record from. The Buffer page has the rolling buffer of what the computer
+// plays: whether it records, how long, and whether it's recording now.
+// The General page is empty.
 //
 // Changes go into the SettingsStore it was given as they're made, which
 // saves them: there's no Apply button.
 class SettingsWindow {
 public:
-    // settings, history and downloader have to outlive the window
-    SettingsWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader);
+    // settings, history, downloader and capturer have to outlive the window
+    SettingsWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader,
+                   Capturer& capturer);
     // Stops listening to history and downloader
     ~SettingsWindow();
 
@@ -65,9 +70,12 @@ private:
     SettingsStore& settings;
     HistoryStore& history;
     ModelDownloader& downloader;
-    // From history.add_listener and downloader.add_listener
+    Capturer& capturer;
+    // From history.add_listener, downloader.add_listener and
+    // settings.add_listener
     int history_listener = -1;
     int downloader_listener = -1;
+    int settings_listener = -1;
 
     // Owned by SettingsWindow as a member, so no new/delete anywhere.
     // Closing the window only hides it, so its settings stay as they were.
@@ -93,6 +101,12 @@ private:
     // item i saves, "" for Default.
     Fl_Choice* mic_choice = nullptr;
     std::vector<std::string> mic_names;
+    // On the Buffer page. The numbers are applied like capacity_input's.
+    Fl_Check_Button* buffer_enabled = nullptr;
+    ClipboardInput* buffer_seconds_input = nullptr;
+    ClipboardInput* selection_seconds_input = nullptr;
+    // Recording, off, or why it can't record
+    Fl_Box* buffer_status = nullptr;
 
     // Static because FLTK callbacks are plain functions; the
     // SettingsWindow comes in through data.
@@ -106,12 +120,15 @@ private:
     static void on_model_chosen(Fl_Widget* w, void* data);
     static void on_model_action(Fl_Widget* w, void* data);
     static void on_mic_chosen(Fl_Widget* w, void* data);
+    static void on_buffer_enabled(Fl_Widget* w, void* data);
+    static void on_buffer_seconds(Fl_Widget* w, void* data);
 
     // Add a page's settings to the current group, a page starting at x
     // that's w wide
     void add_history_settings(int x, int w);
     void add_api_settings(int x, int w);
     void add_speech_settings(int x, int w);
+    void add_buffer_settings(int x, int w);
     void select(size_t i);
     // Shows how many searches there are, which changes with every search
     void refresh_history();
@@ -129,4 +146,10 @@ private:
     void delete_model(const WhisperModel& model);
     // Lists the microphones plugged in now, with the saved one selected
     void refresh_microphones();
+    // Saves the numbers typed on the Buffer page. Does nothing if they
+    // haven't changed.
+    void apply_buffer_seconds();
+    // Shows whether the buffer is recording, which also changes when the
+    // audio system comes or goes
+    void refresh_buffer();
 };

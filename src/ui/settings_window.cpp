@@ -10,6 +10,7 @@
 #include <FL/fl_ask.H>
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Button.H>
+#include <FL/Fl_Check_Button.H>
 #include <FL/Fl_Choice.H>
 #include <FL/Fl_Group.H>
 #include <FL/Fl_Progress.H>
@@ -19,6 +20,7 @@
 #include "core/recorder.h"
 #include "core/settings.h"
 #include "core/whisper_models.h"
+#include "ui/capturer.h"
 #include "ui/category_button.h"
 #include "ui/clipboard_input.h"
 #include "ui/history_store.h"
@@ -27,10 +29,11 @@
 #include "ui/settings_store.h"
 #include "ui/theme.h"
 
-// Same categories as japanese-helper, in sidebar order
-static constexpr const char* CATEGORY_NAMES[] = {"General", "History", "API", "Speech-to-Text"};
+// Same categories as japanese-helper, in sidebar order, then the rolling
+// buffer's
+static constexpr const char* CATEGORY_NAMES[] = {"General", "History", "API", "Speech-to-Text", "Buffer"};
 // Indexes into CATEGORY_NAMES
-enum Category : size_t { GENERAL, HISTORY, API, SPEECH_TO_TEXT };
+enum Category : size_t { GENERAL, HISTORY, API, SPEECH_TO_TEXT, BUFFER };
 
 static constexpr int SIDEBAR_W = 160;
 static constexpr int CATEGORY_H = 36;
@@ -55,8 +58,9 @@ static size_t index_of(const WhisperModel& model){
     return static_cast<size_t>(&model - WHISPER_MODELS.data());
 }
 
-SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader)
-    : settings(settings), history(history), downloader(downloader){
+SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader,
+                               Capturer& capturer)
+    : settings(settings), history(history), downloader(downloader), capturer(capturer){
     // win is the current group here, like in MainWindow
 
     // Its own group so the radio buttons only deselect each other
@@ -77,6 +81,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
         if (i == HISTORY) add_history_settings(page_x, page_w);
         if (i == API) add_api_settings(page_x, page_w);
         if (i == SPEECH_TO_TEXT) add_speech_settings(page_x, page_w);
+        if (i == BUFFER) add_buffer_settings(page_x, page_w);
 
         page->end();
         page->hide();    // Shown by select()
@@ -94,14 +99,18 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
     downloader_listener = downloader.add_listener([this](const WhisperModel& model){ refresh_model(model); });
     history_listener = history.add_listener([this]{ refresh_history(); });
     refresh_history();
+    // After the Capturer's own listener, which applies the change first
+    settings_listener = settings.add_listener([this]{ refresh_buffer(); });
 }
 
 SettingsWindow::~SettingsWindow(){
     // E.g. typed, then the app quit from the main window. The stores
     // outlive the window, and save it after.
     apply_capacity();
+    apply_buffer_seconds();
     history.remove_listener(history_listener);
     downloader.remove_listener(downloader_listener);
+    settings.remove_listener(settings_listener);
 }
 
 // How many searches to keep: a label, the number, and a note on what
@@ -175,6 +184,7 @@ void SettingsWindow::on_close(Fl_Widget*, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
     // Typed but not applied yet: closing is done with it too
     self->apply_capacity();
+    self->apply_buffer_seconds();
     self->win.hide();
 }
 
@@ -300,6 +310,7 @@ void SettingsWindow::show(){
     // A model may have been deleted or added outside the app meanwhile
     refresh_models();
     refresh_microphones();
+    refresh_buffer();
     win.show();
 }
 
@@ -315,8 +326,8 @@ void SettingsWindow::on_category(Fl_Widget* w, void* data){
 }
 
 void SettingsWindow::select(size_t i){
-    // Leaving the History page is done with it too. The box keeps focus
-    // while hidden, so it wouldn't hear about it otherwise.
+    // Leaving the History or Buffer page is done with it too. The box
+    // keeps focus while hidden, so it wouldn't hear about it otherwise.
     apply_capacity();
     // Already done when the category was clicked, but not when it's
     // selected from code
@@ -507,4 +518,108 @@ void SettingsWindow::refresh_microphones(){
     const auto selected = std::ranges::find(mic_names, saved);
     mic_choice->value(static_cast<int>(selected - mic_names.begin()));
     mic_choice->redraw();
+}
+
+// A label over a box for a number of seconds, with a note right of the box
+static ClipboardInput* seconds_input(int left, int& y, int w, const char* label_text, const std::string& note_text){
+    Fl_Box* label = new Fl_Box(left, y, w, 20, label_text);
+    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    y += label->h() + 4;
+
+    auto* input = new ClipboardInput(left, y, CAPACITY_W, PILL_H);
+    input->type(FL_INT_INPUT);
+    // Like the capacity, only on Enter or leaving the box: typing 60 goes
+    // through 6, which would forget what was recorded twice
+    input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
+
+    Fl_Box* note = new Fl_Box(left + CAPACITY_W + 10, y, w - CAPACITY_W - 10, PILL_H);
+    note->copy_label(note_text.c_str());
+    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    note->labelsize(12);
+    note->labelcolor(DIM);
+    y += PILL_H + 14;
+    return input;
+}
+
+// Whether it records, then how long it keeps and how much a capture
+// starts with selected, then whether it's recording now
+void SettingsWindow::add_buffer_settings(int x, int w){
+    const int left = x + MARGIN, right = x + w - MARGIN;
+    // Lines up with the first category in the sidebar, like the API page
+    int y = MARGIN + (CATEGORY_H - 20) / 2;
+
+    buffer_enabled = new Fl_Check_Button(left, y, right - left, 20,
+                                         "Keep the last seconds of what the computer plays");
+    buffer_enabled->value(settings.get().buffer.enabled);
+    buffer_enabled->clear_visible_focus();
+    buffer_enabled->callback(on_buffer_enabled, this);
+    y += buffer_enabled->h() + 2;
+
+    Fl_Box* privacy = new Fl_Box(left, y, right - left, 20,
+                                 "It's only kept in memory. Nothing is saved unless you add it to a card.");
+    privacy->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    privacy->labelsize(12);
+    privacy->labelcolor(DIM);
+    y += privacy->h() + 14;
+
+    buffer_seconds_input = seconds_input(left, y, right - left, "Seconds to keep",
+        std::format("From {} to {}. Changing it forgets what was kept.",
+                    BufferSettings::MIN_SECONDS, BufferSettings::MAX_SECONDS));
+    buffer_seconds_input->value(settings.get().buffer.seconds);
+    buffer_seconds_input->callback(on_buffer_seconds, this);
+
+    selection_seconds_input = seconds_input(left, y, right - left, "Seconds selected at first",
+                                            "The end of a capture, to send to whisper as it is.");
+    selection_seconds_input->value(settings.get().buffer.selection_seconds);
+    selection_seconds_input->callback(on_buffer_seconds, this);
+
+    buffer_status = new Fl_Box(left, y, right - left, 40);
+    buffer_status->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+}
+
+void SettingsWindow::on_buffer_enabled(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const bool enabled = self->buffer_enabled->value();
+    self->settings.update([enabled](Settings& s){ s.buffer.enabled = enabled; });
+}
+
+void SettingsWindow::on_buffer_seconds(Fl_Widget*, void* data){
+    static_cast<SettingsWindow*>(data)->apply_buffer_seconds();
+}
+
+void SettingsWindow::apply_buffer_seconds(){
+    // Empty, or not a number: put back as it was
+    const BufferSettings& saved = settings.get().buffer;
+    int seconds = saved.seconds, selection = saved.selection_seconds;
+    try {
+        seconds = std::stoi(buffer_seconds_input->value());
+    } catch (const std::exception&){}
+    try {
+        selection = std::stoi(selection_seconds_input->value());
+    } catch (const std::exception&){}
+
+    if (seconds != saved.seconds || selection != saved.selection_seconds)
+        settings.update([seconds, selection](Settings& s){
+            s.buffer.seconds = seconds;
+            s.buffer.selection_seconds = selection;
+        });
+    // Clamped by update(), and shown that way
+    buffer_seconds_input->value(settings.get().buffer.seconds);
+    selection_seconds_input->value(settings.get().buffer.selection_seconds);
+}
+
+void SettingsWindow::refresh_buffer(){
+    buffer_enabled->value(settings.get().buffer.enabled);
+    if (capturer.recording()){
+        buffer_status->copy_label(std::format("Recording. The last {} seconds are kept.",
+                                              settings.get().buffer.seconds).c_str());
+        buffer_status->labelcolor(DIM);
+    } else if (!settings.get().buffer.enabled){
+        buffer_status->copy_label("Off. Nothing is recorded.");
+        buffer_status->labelcolor(DIM);
+    } else {
+        buffer_status->copy_label(std::format("Not recording: {}", capturer.error()).c_str());
+        buffer_status->labelcolor(ERROR_COLOR);
+    }
+    buffer_status->redraw();
 }

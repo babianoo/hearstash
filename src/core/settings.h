@@ -7,8 +7,9 @@
 // as JSON. Grouped like the window's categories, each group an object in
 // the file:
 //
-//   {"api": {"deepl_key": "..."}, "history": {"capacity": 100},
-//    "speech": {"whisper_model": "small"}, "version": 1}
+//   {"api": {"deepl_key": "..."}, "buffer": {"seconds": 30},
+//    "history": {"capacity": 100}, "speech": {"whisper_model": "small"},
+//    "version": 1}
 //
 // The field names are the JSON keys, so renaming one changes the file
 // format. A field's default is what it gets when the file doesn't have it.
@@ -41,8 +42,23 @@ struct SpeechSettings {
     std::string input_device;
 };
 
+// The Buffer category: the rolling buffer of what the computer plays
+struct BufferSettings {
+    // Whether it records at all. Off, nothing is kept.
+    bool enabled = true;
+    // How much it keeps, the newest. Between MIN_SECONDS and MAX_SECONDS.
+    int seconds = 30;
+    // How much of the end of a capture is selected when it opens. Between
+    // 1 and seconds.
+    int selection_seconds = 8;
+
+    static constexpr int MIN_SECONDS = 10;
+    static constexpr int MAX_SECONDS = 120;
+};
+
 struct Settings {
     ApiSettings api;
+    BufferSettings buffer;
     HistorySettings history;
     SpeechSettings speech;
 };

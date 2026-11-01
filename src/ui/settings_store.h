@@ -2,6 +2,8 @@
 
 #include <filesystem>
 #include <functional>
+#include <utility>
+#include <vector>
 
 #include "core/settings.h"
 
@@ -30,11 +32,20 @@ public:
     // once, not on every keystroke.
     void update(const std::function<void(Settings&)>& change);
 
+    // listener is called after every update(), e.g. to apply a change
+    // right away. Returns an id for remove_listener. Remove a listener
+    // before what it calls into dies.
+    int add_listener(std::function<void()> listener);
+    void remove_listener(int id);
+
 private:
     std::filesystem::path file;
     Settings settings;
     // Changed since they were last saved
     bool unsaved = false;
+
+    std::vector<std::pair<int, std::function<void()>>> listeners;
+    int next_listener_id = 0;
 
     // Static because FLTK callbacks are plain functions; the store comes
     // in through data.

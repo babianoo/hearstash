@@ -3,6 +3,7 @@
 
 #include "core/config_dir.h"
 #include "core/http.h"
+#include "ui/capturer.h"
 #include "ui/theme.h"
 #include "ui/history_store.h"
 #include "ui/main_window.h"
@@ -28,8 +29,11 @@ int main(int argc, char** argv){
     ModelDownloader downloader;
     // The same goes for it
     HistoryStore history(state_dir() / "history.json", settings.get().history.capacity);
+    // The same goes for it. Keeps the last seconds of what the computer
+    // plays from now until the app quits.
+    Capturer capturer(settings);
 
-    MainWindow main_win(settings, history, downloader);
+    MainWindow main_win(settings, history, downloader, capturer);
     main_win.show(argc, argv);
 
     return Fl::run();

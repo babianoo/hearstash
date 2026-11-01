@@ -23,9 +23,10 @@ static constexpr int VERSION = 1;
 // _WITH_DEFAULT: a key the file doesn't have keeps the field's default
 // instead of throwing.
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model, input_device)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, api, history, speech)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, api, buffer, history, speech)
 
 Settings load_settings(const fs::path& file){
     std::ifstream in(file);
@@ -61,6 +62,9 @@ void sanitize(Settings& settings){
     // E.g. edited by hand
     int& capacity = settings.history.capacity;
     capacity = std::clamp(capacity, HistorySettings::MIN_CAPACITY, HistorySettings::MAX_CAPACITY);
+    BufferSettings& buffer = settings.buffer;
+    buffer.seconds = std::clamp(buffer.seconds, BufferSettings::MIN_SECONDS, BufferSettings::MAX_SECONDS);
+    buffer.selection_seconds = std::clamp(buffer.selection_seconds, 1, buffer.seconds);
 
     // An id the app doesn't offer, e.g. one a version with other models
     // saved, or a typo in the file. Clearing it means nothing has to check

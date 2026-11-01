@@ -18,6 +18,7 @@
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in main_window.cpp instead.
+class Capturer;
 class HistoryStore;
 class HistoryWindow;
 class ModelDownloader;
@@ -32,8 +33,8 @@ struct TextSpan;
 
 class MainWindow {
 public:
-    // settings, history and downloader have to outlive the window
-    MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader);
+    // settings, history, downloader and capturer have to outlive the window
+    MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader, Capturer& capturer);
     // Defined in main_window.cpp, where SettingsWindow, HistoryWindow and
     // Recorder are complete types, which unique_ptr needs to delete them.
     // Stops a transcription still running and waits for it, or for the
@@ -83,6 +84,7 @@ private:
     HistoryStore& history;
     // Only passed on to settings_win
     ModelDownloader& downloader;
+    Capturer& capturer;
     // Created on the first click of the settings button. Not a plain
     // member: constructing a window makes it the current group, so while
     // win's widgets are being created it would take them in instead of win.

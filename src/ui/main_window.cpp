@@ -121,8 +121,9 @@ static Fl_Button* icon_button(int x, const char* svg, const char* tooltip){
     return btn;
 }
 
-MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader)
-    : settings(settings), history(history), downloader(downloader){
+MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader,
+                       Capturer& capturer)
+    : settings(settings), history(history), downloader(downloader), capturer(capturer){
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
 
@@ -290,7 +291,7 @@ void MainWindow::on_unload_timeout(void* data){
 }
 
 SettingsWindow& MainWindow::settings_window(){
-    if (!settings_win) settings_win = std::make_unique<SettingsWindow>(settings, history, downloader);
+    if (!settings_win) settings_win = std::make_unique<SettingsWindow>(settings, history, downloader, capturer);
     return *settings_win;
 }
 

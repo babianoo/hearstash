@@ -25,6 +25,19 @@ void SettingsStore::update(const std::function<void(Settings&)>& change){
     // Restarts the wait, so a run of changes is saved once, after the last
     Fl::remove_timeout(on_save_timeout, this);
     Fl::add_timeout(SAVE_DELAY, on_save_timeout, this);
+
+    // A copy, so a listener can add or remove listeners
+    const auto current = listeners;
+    for (const auto& [id, listener] : current) listener();
+}
+
+int SettingsStore::add_listener(std::function<void()> listener){
+    listeners.emplace_back(next_listener_id, std::move(listener));
+    return next_listener_id++;
+}
+
+void SettingsStore::remove_listener(int id){
+    std::erase_if(listeners, [id](const auto& entry){ return entry.first == id; });
 }
 
 void SettingsStore::on_save_timeout(void* data){

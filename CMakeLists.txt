@@ -65,6 +65,7 @@ endif()
 add_executable(prototype
     src/main.cpp
     src/core/atomic_write.cpp
+    src/core/audio_buffer.cpp
     src/core/bad_file.cpp
     src/core/history.cpp
     src/core/http.cpp
@@ -79,6 +80,7 @@ add_executable(prototype
     src/core/time_ranges.cpp
     src/core/transcriber.cpp
     src/core/whisper_models.cpp
+    src/ui/capturer.cpp
     src/ui/category_button.cpp
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
