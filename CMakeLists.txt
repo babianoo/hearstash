@@ -19,6 +19,9 @@ if(NOT FLTK_FOUND)
 endif()
 find_package(CURL REQUIRED)
 find_package(nlohmann_json 3.11 REQUIRED)
+# For saving the pictures on Anki cards. libjpeg-turbo is usually there
+# already, since FLTK loads JPEGs with it.
+find_package(JPEG REQUIRED)
 # System FLTK may be built with cairo support, so its public header needs
 # cairo.h even though we don't use cairo directly.
 pkg_check_modules(CAIRO QUIET cairo)
@@ -70,6 +73,7 @@ add_executable(prototype
     src/core/clip_player.cpp
     src/core/history.cpp
     src/core/http.cpp
+    src/core/image.cpp
     src/core/deepl.cpp
     src/core/jisho.cpp
     src/core/local_time.cpp
@@ -78,6 +82,7 @@ add_executable(prototype
     src/core/recorder.cpp
     src/core/resample.cpp
     src/core/sample_ring.cpp
+    src/core/screenshot.cpp
     src/core/settings.cpp
     src/core/sha1.cpp
     src/core/time_ranges.cpp
@@ -88,6 +93,7 @@ add_executable(prototype
     src/ui/category_button.cpp
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
+    src/ui/crop_view.cpp
     src/ui/filter_bar.cpp
     src/ui/global_hotkey.cpp
     src/ui/history_store.cpp
@@ -118,6 +124,7 @@ target_include_directories(prototype PRIVATE
 target_link_libraries(prototype PRIVATE
     ${FLTK_LIBRARIES}
     CURL::libcurl
+    JPEG::JPEG
     nlohmann_json::nlohmann_json
     # Brings its include directory and ggml's libraries with it
     whisper
@@ -146,3 +153,9 @@ add_executable(lookup_text_test tests/lookup_text_test.cpp src/core/lookup_text.
 target_compile_options(lookup_text_test PRIVATE -Wall -Wextra)
 target_include_directories(lookup_text_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME lookup_text COMMAND lookup_text_test)
+
+add_executable(image_test tests/image_test.cpp src/core/image.cpp src/core/screenshot.cpp)
+target_compile_options(image_test PRIVATE -Wall -Wextra)
+target_include_directories(image_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(image_test PRIVATE JPEG::JPEG nlohmann_json::nlohmann_json)
+add_test(NAME image COMMAND image_test)
