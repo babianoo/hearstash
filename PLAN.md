@@ -228,7 +228,12 @@ which still has to be tried by hand: Anki wasn't open while it was
 built, so only "Anki isn't open" was tested. Picking a note type in
 Settings > Anki guesses the fields from their names (src/core/anki_fields.h,
 tested). Cards are tagged `prototype`, and pictures are at most 480 px
-tall.
+tall. Each part is formatted like the user's Yomitan cards
+(src/core/card_format.h): the looked-up word highlighted in the
+sentence, `word【reading】`, the meanings as a yomitan-glossary list,
+then `[sound:...]` and `<img alt="snapshot">`, in whichever fields the
+settings say. Jisho has no pitch accents, word audio or conjugations,
+so those parts of the template stay empty.
 
 ### Left for Windows
 

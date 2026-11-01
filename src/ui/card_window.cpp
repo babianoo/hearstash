@@ -13,6 +13,7 @@
 #include <FL/Fl_Button.H>
 
 #include "core/anki_connect.h"
+#include "core/card_format.h"
 #include "core/media_encoding.h"
 #include "core/settings.h"
 #include "ui/clipboard_input.h"
@@ -33,22 +34,6 @@ static constexpr int PICTURE_MAX_H = 480;
 static constexpr int JPEG_QUALITY = 85;
 // Every card the app adds gets it, so they can be found in Anki
 static constexpr const char* TAG = "prototype";
-
-// text as HTML, which Anki's fields are: the characters HTML treats
-// specially written out, and line breaks as <br>
-static std::string to_html(const std::string& text){
-    std::string html;
-    for (char c : text){
-        switch (c){
-        case '&': html += "&amp;"; break;
-        case '<': html += "&lt;"; break;
-        case '>': html += "&gt;"; break;
-        case '\n': html += "<br>"; break;
-        default: html += c;
-        }
-    }
-    return html;
-}
 
 // A label on the left, at the field's first line
 static void label(int y, const char* text){
@@ -72,6 +57,8 @@ CardWindow::CardWindow(SettingsStore& settings) : settings(settings){
     reading_input = add_field("Reading", 1);
     meaning_input = add_field("Meaning", 4);
     sentence_input = add_field("Sentence", 2);
+    highlight_input = add_field("Highlight", 1);
+    highlight_input->tooltip("The part of the sentence to show bigger and in color, as it's written there");
 
     label(y, "Audio");
     audio_info = new Fl_Box(field_x, y, field_w, PILL_H);
@@ -113,6 +100,7 @@ void CardWindow::open(CardDraft new_draft){
     reading_input->value(draft.reading.c_str());
     meaning_input->value(draft.meaning.c_str());
     sentence_input->value(draft.sentence.c_str());
+    highlight_input->value(draft.highlight.c_str());
 
     if (draft.audio.empty()) audio_info->copy_label("None");
     else audio_info->copy_label(std::format("{:.1f} s, the selection in the capture window",
@@ -170,41 +158,32 @@ void CardWindow::on_add(Fl_Widget*, void* data){
 
 void CardWindow::add(){
     const AnkiSettings& anki = settings.get().anki;
-    AnkiNote note{.deck = anki.deck, .model = anki.note_type, .fields = {}, .tags = {TAG}, .audio = {}, .pictures = {}};
-
-    // Two parts in the same field share it, one under the other
-    const auto put = [&note](const std::string& field, const std::string& html){
-        if (field.empty() || html.empty()) return;
-        for (auto& [name, value] : note.fields)
-            if (name == field){
-                value += "<br>" + html;
-                return;
-            }
-        note.fields.emplace_back(field, html);
-    };
-    put(anki.word_field, to_html(word_input->value()));
-    put(anki.reading_field, to_html(reading_input->value()));
-    put(anki.meaning_field, to_html(meaning_input->value()));
-    put(anki.sentence_field, to_html(sentence_input->value()));
+    CardContent card{.word = word_input->value(), .reading = reading_input->value(),
+                     .meaning = meaning_input->value(), .sentence = sentence_input->value(),
+                     .highlight = highlight_input->value(), .audio_file = {}, .picture_file = {}};
 
     // Named by the time, so they don't replace another card's in Anki's
     // media folder
     const auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     try {
-        if (!anki.audio_field.empty() && !draft.audio.empty())
-            note.audio.push_back({std::format("{}_{}.wav", TAG, stamp), encode_wav(draft.audio, draft.rate), {anki.audio_field}});
-        if (!anki.picture_field.empty() && !draft.screenshot.empty()){
-            const Image picture = shrink_to_height(crop(draft.screenshot, crop_view->crop()), PICTURE_MAX_H);
-            note.pictures.push_back({std::format("{}_{}.jpg", TAG, stamp), encode_jpeg(picture, JPEG_QUALITY),
-                                     {anki.picture_field}});
-        }
-
         // Quick, since Anki is on this machine, but the files take a
         // moment to send
         win.cursor(FL_CURSOR_WAIT);
         Fl::flush();
-        anki_add_note(note);
+        // Stored first, so the note can show them. If the note is then
+        // refused, they stay in the media folder unused until Anki's Check
+        // Media removes them.
+        if (!anki.audio_field.empty() && !draft.audio.empty()){
+            card.audio_file = std::format("{}_{}.wav", TAG, stamp);
+            anki_store_media(card.audio_file, encode_wav(draft.audio, draft.rate));
+        }
+        if (!anki.picture_field.empty() && !draft.screenshot.empty()){
+            card.picture_file = std::format("{}_{}.jpg", TAG, stamp);
+            const Image picture = shrink_to_height(crop(draft.screenshot, crop_view->crop()), PICTURE_MAX_H);
+            anki_store_media(card.picture_file, encode_jpeg(picture, JPEG_QUALITY));
+        }
+        anki_add_note({.deck = anki.deck, .model = anki.note_type, .fields = format_card(card, anki), .tags = {TAG}});
         win.cursor(FL_CURSOR_DEFAULT);
     } catch (const std::exception& e){
         win.cursor(FL_CURSOR_DEFAULT);

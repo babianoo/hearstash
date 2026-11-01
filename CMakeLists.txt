@@ -72,6 +72,7 @@ add_executable(prototype
     src/core/atomic_write.cpp
     src/core/audio_buffer.cpp
     src/core/bad_file.cpp
+    src/core/card_format.cpp
     src/core/clip_player.cpp
     src/core/history.cpp
     src/core/http.cpp
@@ -173,3 +174,8 @@ add_executable(anki_fields_test tests/anki_fields_test.cpp src/core/anki_fields.
 target_compile_options(anki_fields_test PRIVATE -Wall -Wextra)
 target_include_directories(anki_fields_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME anki_fields COMMAND anki_fields_test)
+
+add_executable(card_format_test tests/card_format_test.cpp src/core/card_format.cpp src/core/anki_fields.cpp)
+target_compile_options(card_format_test PRIVATE -Wall -Wextra)
+target_include_directories(card_format_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME card_format COMMAND card_format_test)

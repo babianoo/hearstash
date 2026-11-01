@@ -60,18 +60,15 @@ std::vector<std::string> anki_model_field_names(const std::string& model){
     return strings(request("modelFieldNames", {{"modelName", model}}));
 }
 
-static json media(const std::vector<AnkiMedia>& files){
-    json list = json::array();
-    for (const AnkiMedia& file : files)
-        list.push_back({{"filename", file.filename}, {"data", base64_encode(file.data)}, {"fields", file.fields}});
-    return list;
+void anki_store_media(const std::string& filename, const std::vector<std::uint8_t>& data){
+    request("storeMediaFile", {{"filename", filename}, {"data", base64_encode(data)}});
 }
 
 std::int64_t anki_add_note(const AnkiNote& note){
     json fields = json::object();
     for (const auto& [name, value] : note.fields) fields[name] = value;
 
-    json params = {{"note", {
+    const json params = {{"note", {
         {"deckName", note.deck},
         {"modelName", note.model},
         {"fields", fields},
@@ -79,9 +76,6 @@ std::int64_t anki_add_note(const AnkiNote& note){
         // Anki's own check, which says so instead of adding it again
         {"options", {{"allowDuplicate", false}}},
     }}};
-    // With the data in the request, AnkiConnect stores the files itself
-    if (!note.audio.empty()) params["note"]["audio"] = media(note.audio);
-    if (!note.pictures.empty()) params["note"]["picture"] = media(note.pictures);
 
     const json result = request("addNote", params);
     if (!result.is_number_integer()) throw std::runtime_error("Anki didn't add the note");

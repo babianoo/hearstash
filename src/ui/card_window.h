@@ -23,6 +23,8 @@ struct CardDraft {
     std::string reading;
     std::string meaning;
     std::string sentence;
+    // The part of sentence that was looked up, as it's written there
+    std::string highlight;
     // The selection in the capture window
     std::vector<float> audio;
     int rate = 0;
@@ -33,7 +35,8 @@ struct CardDraft {
 };
 
 // The window "Add to Anki" opens: the card's text in fields that can be
-// edited, and the screenshot with a rectangle to crop it to, which starts
+// edited, formatted like the user's Yomitan cards when added (see
+// format_card()), and the screenshot with a rectangle to crop it to, which starts
 // where the last card's crop was. The card is only added when Add is
 // pressed, to the deck and note type chosen in Settings > Anki, each part
 // in the field chosen there.
@@ -55,7 +58,7 @@ private:
 
     // Owned by CardWindow as a member, so no new/delete anywhere. Closing
     // it (or Escape) hides it.
-    Fl_Double_Window win{720, 650, "Add to Anki"};
+    Fl_Double_Window win{720, 686, "Add to Anki"};
 
     // Created with new in the constructor and added to win, which deletes
     // them when it dies
@@ -63,6 +66,7 @@ private:
     ClipboardInput* reading_input = nullptr;
     ClipboardInput* meaning_input = nullptr;
     ClipboardInput* sentence_input = nullptr;
+    ClipboardInput* highlight_input = nullptr;
     // How long the audio is
     Fl_Box* audio_info = nullptr;
     CropView* crop_view = nullptr;

@@ -129,6 +129,7 @@ void CaptureWindow::open(std::vector<float> new_audio, int new_rate, int selecti
     screenshot_error = std::move(new_screenshot_error);
     transcript_shown.clear();
     entry_shown.reset();
+    keyword_shown.clear();
 
     audio = std::move(new_audio);
     rate = new_rate;
@@ -255,6 +256,7 @@ void CaptureWindow::transcribe(){
     transcribing = id;
     transcript_shown.clear();
     entry_shown.reset();
+    keyword_shown.clear();
     ++latest_lookup;
     show_lookup({});
     refresh_transcribe_button();
@@ -312,6 +314,7 @@ void CaptureWindow::on_job_done(void* data){
         self->show_transcript({{result->text, TRANSCRIPT}});
         self->transcript_shown = result->text;
         self->entry_shown.reset();
+        self->keyword_shown.clear();
         ++self->latest_lookup;
         self->show_lookup({{"Select a word in the text to look it up.", NOTE}});
     }
@@ -402,6 +405,8 @@ void CaptureWindow::add_to_anki(){
 
     CardDraft draft;
     draft.sentence = transcript_shown;
+    // What was selected to look up, as it's written in the transcript
+    draft.highlight = keyword_shown;
     if (entry_shown && !entry_shown->forms.empty()){
         // Kana-only words have just the reading, which then is the word
         const JishoForm& form = entry_shown->forms.front();
@@ -438,6 +443,7 @@ void CaptureWindow::on_close(Fl_Widget*, void* data){
     self->screenshot = {};
     self->transcript_shown.clear();
     self->entry_shown.reset();
+    self->keyword_shown.clear();
     self->show_transcript({});
     ++self->latest_lookup;
     self->show_lookup({});
