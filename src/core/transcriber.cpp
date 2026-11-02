@@ -1,5 +1,6 @@
 #include "core/transcriber.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <format>
 #include <fstream>
@@ -38,6 +39,21 @@ static void log_warnings(ggml_log_level level, const char* text, void*){
     thread_local bool shown = false;
     if (level != GGML_LOG_LEVEL_CONT) shown = level >= GGML_LOG_LEVEL_WARN;
     if (shown) std::fputs(text, stderr);
+}
+
+// How much audio whisper's encoder looks at, in its frames (50 a second):
+// the clip plus 5 seconds, and at least 10 seconds. By default it's always
+// a 30-second window, however short the clip, and encoding takes most of
+// the time, in proportion to the window: a 4-second line took 31-35 s
+// with large-v3-turbo-q5_0 on an i7-8565U, and 10-13 s like this, with the
+// same text. A window cut any closer to the clip makes it write nonsense
+// ("empl but").
+static int audio_context(whisper_context* ctx, size_t samples){
+    constexpr size_t SAMPLES_PER_FRAME = Transcriber::SAMPLE_RATE / 50;
+    constexpr int SLACK = 256;      // About 5 seconds
+    constexpr int MINIMUM = 512;    // About 10 seconds
+    const int clip = static_cast<int>(samples / SAMPLES_PER_FRAME);
+    return std::min(whisper_model_n_audio_ctx(ctx), std::max(MINIMUM, clip + SLACK));
 }
 
 // Called while whisper computes, often enough to stop in about half a
@@ -108,6 +124,7 @@ std::string Transcriber::transcribe(const WhisperModel& wanted, std::span<const 
     // Only the text is used
     params.no_timestamps = true;
     params.suppress_blank = true;
+    params.audio_ctx = audio_context(ctx.get(), samples.size());
     // Tokens that aren't speech, like (音楽) ("music"), which it otherwise
     // gives for a recording of room noise
     params.suppress_nst = true;

@@ -340,6 +340,10 @@ Still open:
   laptop for a 5–10 s clip? Measured on the 8-core laptop it was built
   on: about 6 s with base and 7 s with small for an 8 s clip, with the
   model already loaded. Whisper pads every clip to 30 s, so a short clip
-  costs about as much as a long one; setting `audio_ctx` to fit the clip
-  could make it several times faster, at some cost in accuracy.
-  Worth trying before the demo.
+  cost about as much as a long one. The encoder now looks at the clip
+  plus 5 s, at least 10 s (`audio_context` in src/core/transcriber.cpp):
+  large-v3-turbo-q5_0, which picks kanji far better than small, went from
+  31-35 s to 10-13 s for a 4 s line, and from 32 s to 17-20 s for a 10 s
+  one, with the same text. A window cut closer to the clip breaks the
+  output. Measured with espeak's voice, so still to check on real anime
+  lines; and turbo is still slow on this CPU.
