@@ -16,6 +16,7 @@ class ClipboardInput;
 class HistoryStore;
 class ModelDownloader;
 class SettingsStore;
+class ShortcutInput;
 class Fl_Box;
 class Fl_Button;
 class Fl_Check_Button;
@@ -32,7 +33,7 @@ struct WhisperModel;
 // a row each to download, delete and choose one, then the microphone to
 // record from. The Buffer page has the rolling buffer of what the computer
 // plays: whether it records, how long, whether it's recording now, and
-// the command to bind to a key to capture. The Anki page has the deck and
+// the capture shortcut (on Linux, the command to bind to a key). The Anki page has the deck and
 // note type to add cards to, which field gets each part of a card, both
 // listed from Anki, and the picture's quality. The General page is empty.
 //
@@ -112,6 +113,8 @@ private:
     ClipboardInput* selection_seconds_input = nullptr;
     // Recording, off, or why it can't record
     Fl_Box* buffer_status = nullptr;
+    // The capture shortcut, on Windows only
+    ShortcutInput* shortcut_input = nullptr;
     // Why the capture shortcut can't be received, if it can't
     Fl_Box* hotkey_status = nullptr;
     // On the Anki page. The names are what each item of the dropdowns
@@ -141,6 +144,7 @@ private:
     static void on_mic_chosen(Fl_Widget* w, void* data);
     static void on_buffer_enabled(Fl_Widget* w, void* data);
     static void on_buffer_seconds(Fl_Widget* w, void* data);
+    static void on_shortcut(Fl_Widget* w, void* data);
     static void on_deck_chosen(Fl_Widget* w, void* data);
     static void on_note_type_chosen(Fl_Widget* w, void* data);
     static void on_field_chosen(Fl_Widget* w, void* data);

@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <string>
 
+#include "core/shortcut.h"
+
 // What the settings window changes and the rest of the app reads, saved
 // as JSON. Grouped like the window's categories, each group an object in
 // the file:
@@ -51,6 +53,9 @@ struct BufferSettings {
     // How much of the end of a capture is selected when it opens. Between
     // 1 and seconds.
     int selection_seconds = 8;
+    // The capture shortcut on Windows, as parse_shortcut reads it. Unused
+    // on Linux, where the desktop owns the key.
+    std::string shortcut = DEFAULT_SHORTCUT;
 
     static constexpr int MIN_SECONDS = 10;
     static constexpr int MAX_SECONDS = 120;

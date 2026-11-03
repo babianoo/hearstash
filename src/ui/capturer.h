@@ -12,9 +12,9 @@ class SettingsStore;
 class SharedTranscriber;
 
 // Runs the rolling buffer of what the computer plays, from startup until
-// the app quits, as the Buffer settings say: on or off, and how long.
-// When the capture shortcut is pressed, it opens what's in the buffer in
-// the capture window.
+// the app quits, as the Buffer settings say: on or off, how long, and on
+// Windows the capture shortcut. When the shortcut is pressed, it opens
+// what's in the buffer in the capture window.
 //
 // UI thread only, like the widgets.
 class Capturer {
@@ -39,6 +39,10 @@ public:
     const std::string& error() const { return error_; }
     // Why the capture shortcut can't be received. Empty if it can.
     const std::string& hotkey_error() const { return hotkey_error_; }
+    // Stops the shortcut from capturing until it's unpaused, e.g. while
+    // Settings waits for the keys of a new one: pressing the old one there
+    // would capture instead of reaching it
+    void pause_hotkey(bool paused);
 
     // Opens the last seconds in the capture window, with a screenshot
     // taken now, as the shortcut does
@@ -56,6 +60,10 @@ private:
     // Null if it couldn't be set up
     std::unique_ptr<GlobalHotkey> hotkey;
     std::string hotkey_error_;
+    // The shortcut last given to hotkey, whether that worked or not. Empty
+    // while there's none, e.g. paused.
+    std::string applied_shortcut;
+    bool hotkey_paused = false;
     // Created on the first capture. Not a plain member: constructing a
     // window makes it the current group, and the Capturer is created
     // before the main window.
@@ -63,6 +71,8 @@ private:
 
     // Starts, stops or resizes the buffer to match the settings
     void apply_settings();
+    // Gives hotkey the shortcut the settings have, if it's another
+    void apply_shortcut();
     // Every few seconds: switches to the default output if it changed
     static void on_follow_tick(void* data);
 };

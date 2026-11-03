@@ -29,6 +29,7 @@
 #include "ui/icons.h"
 #include "ui/model_downloader.h"
 #include "ui/settings_store.h"
+#include "ui/shortcut_input.h"
 #include "ui/theme.h"
 
 // Same categories as japanese-helper, in sidebar order, then the rolling
@@ -54,6 +55,10 @@ static constexpr int MODEL_STATUS_W = 110;
 // enough for 1000, and the button that clears them
 static constexpr int CAPACITY_W = 80;
 static constexpr int CLEAR_BTN_W = 120;
+
+// On the Buffer page: the capture shortcut's box, wide enough for
+// Win+Ctrl+Alt+Shift+PageDown
+static constexpr int SHORTCUT_W = 220;
 
 // Replaces choice's items with labels, and selects item selected
 static void set_items(Fl_Choice& choice, const std::vector<std::string>& labels, int selected){
@@ -212,6 +217,7 @@ void SettingsWindow::on_close(Fl_Widget*, void* data){
     self->apply_capacity();
     self->apply_buffer_seconds();
     self->apply_quality();
+    if (self->shortcut_input) self->shortcut_input->stop_waiting();
     self->win.hide();
 }
 
@@ -361,6 +367,7 @@ void SettingsWindow::select(size_t i){
     apply_capacity();
     apply_buffer_seconds();
     apply_quality();
+    if (shortcut_input) shortcut_input->stop_waiting();
     // Already done when the category was clicked, but not when it's
     // selected from code
     categories[i]->setonly();
@@ -598,28 +605,41 @@ void SettingsWindow::add_buffer_settings(int x, int w){
     buffer_status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
     y += buffer_status->h() + 14;
 
-    // The command to bind to a key, in a box it can be copied from. None
-    // on Windows, where the shortcut will be a setting of its own.
-    const std::string command = capture_command();
-    if (command.empty()) return;
-
     Fl_Box* label = new Fl_Box(left, y, right - left, 20, "Capture shortcut");
     label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     y += label->h() + 4;
 
-    auto* command_box = new ClipboardInput(left, y, right - left, PILL_H);
-    command_box->value(command.c_str());
-    command_box->readonly(1);
-    y += PILL_H + 6;
+    // On Linux, the command to bind to a key, in a box it can be copied
+    // from. None on Windows, where the app takes the key itself.
+    const std::string command = capture_command();
+    if (command.empty()){
+        shortcut_input = new ShortcutInput(left, y, SHORTCUT_W, PILL_H);
+        shortcut_input->shortcut(settings.get().buffer.shortcut);
+        shortcut_input->callback(on_shortcut, this);
+        // Otherwise pressing the shortcut there would capture
+        shortcut_input->on_waiting = [this](bool waiting){ capturer.pause_hotkey(waiting); };
 
-    // Wayland lets no app grab a key for itself
-    Fl_Box* note = new Fl_Box(left, y, right - left, 32,
-                              "Bind a key to it in your desktop's settings, e.g. in hyprland.conf:\n"
-                              "bind = SUPER, A, exec, <the command>");
-    note->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    note->labelsize(12);
-    note->labelcolor(DIM);
-    y += note->h() + 4;
+        Fl_Box* note = new Fl_Box(left + SHORTCUT_W + 10, y, right - left - SHORTCUT_W - 10, PILL_H,
+                                  "Click it, then press the keys. Works in any app, even fullscreen.");
+        note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+        note->labelsize(12);
+        note->labelcolor(DIM);
+        y += PILL_H + 6;
+    } else {
+        auto* command_box = new ClipboardInput(left, y, right - left, PILL_H);
+        command_box->value(command.c_str());
+        command_box->readonly(1);
+        y += PILL_H + 6;
+
+        // Wayland lets no app grab a key for itself
+        Fl_Box* note = new Fl_Box(left, y, right - left, 32,
+                                  "Bind a key to it in your desktop's settings, e.g. in hyprland.conf:\n"
+                                  "bind = SUPER, A, exec, <the command>");
+        note->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+        note->labelsize(12);
+        note->labelcolor(DIM);
+        y += note->h() + 4;
+    }
 
     hotkey_status = new Fl_Box(left, y, right - left, 20);
     hotkey_status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
@@ -630,6 +650,14 @@ void SettingsWindow::on_buffer_enabled(Fl_Widget*, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
     const bool enabled = self->buffer_enabled->value();
     self->settings.update([enabled](Settings& s){ s.buffer.enabled = enabled; });
+}
+
+void SettingsWindow::on_shortcut(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const std::string shortcut = self->shortcut_input->shortcut();
+    // The Capturer hears of it and registers it; refresh_buffer() then
+    // shows whether that worked
+    self->settings.update([&shortcut](Settings& s){ s.buffer.shortcut = shortcut; });
 }
 
 void SettingsWindow::on_buffer_seconds(Fl_Widget*, void* data){

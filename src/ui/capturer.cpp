@@ -22,7 +22,10 @@ static constexpr double FOLLOW_TICK = 3;
 Capturer::Capturer(SettingsStore& settings, SharedTranscriber& transcriber)
     : settings(settings), transcriber(transcriber){
     apply_settings();
-    settings_listener = settings.add_listener([this]{ apply_settings(); });
+    settings_listener = settings.add_listener([this]{
+        apply_settings();
+        apply_shortcut();
+    });
     Fl::add_timeout(FOLLOW_TICK, on_follow_tick, this);
 
     try {
@@ -32,6 +35,7 @@ Capturer::Capturer(SettingsStore& settings, SharedTranscriber& transcriber)
         std::cerr << std::format("No capture shortcut: {}\n", e.what());
         hotkey_error_ = e.what();
     }
+    apply_shortcut();
 }
 
 Capturer::~Capturer(){
@@ -65,6 +69,36 @@ void Capturer::apply_settings(){
         // setting changed. The Buffer settings page shows it.
         if (error_ != e.what()) std::cerr << std::format("Not recording what the computer plays: {}\n", e.what());
         error_ = e.what();
+    }
+}
+
+void Capturer::apply_shortcut(){
+    if (!hotkey || hotkey_paused) return;
+    // Every change to any setting comes here, and a shortcut that failed
+    // is only tried again once it's changed
+    const std::string& wanted = settings.get().buffer.shortcut;
+    if (wanted == applied_shortcut) return;
+    applied_shortcut = wanted;
+
+    try {
+        hotkey->set_shortcut(wanted);
+        hotkey_error_.clear();
+    } catch (const std::exception& e){
+        // Shown on the Buffer settings page, next to the shortcut
+        std::cerr << std::format("No capture shortcut: {}\n", e.what());
+        hotkey_error_ = e.what();
+    }
+}
+
+void Capturer::pause_hotkey(bool paused){
+    if (!hotkey || paused == hotkey_paused) return;
+    hotkey_paused = paused;
+    if (paused){
+        // Taking it away can't fail
+        hotkey->set_shortcut("");
+        applied_shortcut.clear();
+    } else {
+        apply_shortcut();
     }
 }
 

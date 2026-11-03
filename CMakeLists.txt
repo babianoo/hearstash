@@ -89,6 +89,7 @@ add_executable(prototype
     src/core/screenshot.cpp
     src/core/settings.cpp
     src/core/sha1.cpp
+    src/core/shortcut.cpp
     src/core/time_ranges.cpp
     src/core/transcriber.cpp
     src/core/whisper_models.cpp
@@ -111,6 +112,7 @@ add_executable(prototype
     src/ui/settings_store.cpp
     src/ui/settings_window.cpp
     src/ui/shared_transcriber.cpp
+    src/ui/shortcut_input.cpp
     src/ui/smooth_scroll.cpp
     src/ui/theme.cpp
     src/ui/waveform.cpp
@@ -183,3 +185,8 @@ add_executable(card_format_test tests/card_format_test.cpp src/core/card_format.
 target_compile_options(card_format_test PRIVATE -Wall -Wextra)
 target_include_directories(card_format_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME card_format COMMAND card_format_test)
+
+add_executable(shortcut_test tests/shortcut_test.cpp src/core/shortcut.cpp)
+target_compile_options(shortcut_test PRIVATE -Wall -Wextra)
+target_include_directories(shortcut_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME shortcut COMMAND shortcut_test)

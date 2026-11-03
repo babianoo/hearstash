@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
+#include <optional>
 
 #include "core/atomic_write.h"
 #include "core/bad_file.h"
+#include "core/shortcut.h"
 #include "core/whisper_models.h"
 
 // JSON
@@ -26,7 +28,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AnkiSettings, deck, note_type, w
                                                 meaning_field, sentence_field, audio_field, picture_field,
                                                 picture_quality, crop_x, crop_y, crop_w, crop_h)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds, shortcut)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model, input_device)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, anki, api, buffer, history, speech)
@@ -68,6 +70,10 @@ void sanitize(Settings& settings){
     BufferSettings& buffer = settings.buffer;
     buffer.seconds = std::clamp(buffer.seconds, BufferSettings::MIN_SECONDS, BufferSettings::MAX_SECONDS);
     buffer.selection_seconds = std::clamp(buffer.selection_seconds, 1, buffer.seconds);
+    // Written the one way, so a change can be told by comparing. One that
+    // can't be read is replaced, so there's always one.
+    const std::optional<Shortcut> shortcut = parse_shortcut(buffer.shortcut);
+    buffer.shortcut = shortcut ? format_shortcut(*shortcut) : DEFAULT_SHORTCUT;
 
     // A crop that doesn't fit in a screenshot is no crop
     AnkiSettings& anki = settings.anki;
