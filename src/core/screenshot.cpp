@@ -44,11 +44,77 @@ Image parse_ppm(const std::vector<std::uint8_t>& data){
 
 #ifdef _WIN32
 
+#define WIN32_LEAN_AND_MEAN
+// Already defined by MinGW's C++ library, so std::min isn't broken
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+// The GDI objects a screenshot needs, released in reverse when it goes out
+// of scope, however far it got
+namespace {
+struct Gdi {
+    HDC screen = nullptr;
+    HDC memory = nullptr;
+    HBITMAP bitmap = nullptr;
+    HGDIOBJ previous = nullptr;
+
+    ~Gdi(){
+        if (previous) SelectObject(memory, previous);
+        if (bitmap) DeleteObject(bitmap);
+        if (memory) DeleteDC(memory);
+        if (screen) ReleaseDC(nullptr, screen);
+    }
+};
+}
+
 Image take_screenshot(){
-    // TODO(Windows): the GDI capture from japanese-helper/src/ocr.cpp,
-    // fixed to take the whole monitor of the foreground window, or DXGI
-    // Desktop Duplication if GDI gives black video
-    throw std::runtime_error("Screenshots aren't done on Windows yet");
+    // The monitor with the foreground window, or the main one when nothing
+    // has the focus. In real pixels: FLTK made the app DPI-aware when its
+    // first window opened.
+    const HMONITOR monitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(monitor, &info)) throw std::runtime_error("Couldn't take a screenshot: no monitor found");
+    const RECT area = info.rcMonitor;
+    const int width = area.right - area.left, height = area.bottom - area.top;
+
+    // A bitmap whose pixels can be read straight from memory: 4 bytes each
+    // (blue, green, red, unused), rows from the top
+    BITMAPINFO format{};
+    format.bmiHeader.biSize = sizeof(format.bmiHeader);
+    format.bmiHeader.biWidth = width;
+    format.bmiHeader.biHeight = -height;
+    format.bmiHeader.biPlanes = 1;
+    format.bmiHeader.biBitCount = 32;
+    format.bmiHeader.biCompression = BI_RGB;
+
+    Gdi gdi;
+    void* pixels = nullptr;
+    gdi.screen = GetDC(nullptr);
+    if (gdi.screen) gdi.memory = CreateCompatibleDC(gdi.screen);
+    if (gdi.memory) gdi.bitmap = CreateDIBSection(gdi.screen, &format, DIB_RGB_COLORS, &pixels, nullptr, 0);
+    if (!gdi.bitmap || !pixels) throw std::runtime_error("Couldn't take a screenshot: out of memory for it");
+    gdi.previous = SelectObject(gdi.memory, gdi.bitmap);
+
+    // The desktop's coordinates start at the main monitor's corner, so
+    // another monitor's can be negative. CAPTUREBLT takes layered windows
+    // too, which some video players are.
+    if (!BitBlt(gdi.memory, 0, 0, width, height, gdi.screen, area.left, area.top, SRCCOPY | CAPTUREBLT))
+        throw std::runtime_error(std::format("Couldn't take a screenshot: error {}", GetLastError()));
+    GdiFlush();
+
+    Image image{.width = width, .height = height, .rgb = {}};
+    const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    image.rgb.resize(count * 3);
+    const auto* from = static_cast<const std::uint8_t*>(pixels);
+    for (size_t i = 0; i < count; ++i){
+        image.rgb[i * 3] = from[i * 4 + 2];
+        image.rgb[i * 3 + 1] = from[i * 4 + 1];
+        image.rgb[i * 3 + 2] = from[i * 4];
+    }
+    return image;
 }
 
 #else

@@ -163,6 +163,10 @@ add_executable(image_test tests/image_test.cpp src/core/image.cpp src/core/scree
 target_compile_options(image_test PRIVATE -Wall -Wextra)
 target_include_directories(image_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(image_test PRIVATE JPEG::JPEG nlohmann_json::nlohmann_json)
+# For screenshot.cpp's GDI capture, which the test doesn't run
+if(WIN32)
+    target_link_libraries(image_test PRIVATE gdi32 user32)
+endif()
 add_test(NAME image COMMAND image_test)
 
 add_executable(media_encoding_test tests/media_encoding_test.cpp src/core/media_encoding.cpp)

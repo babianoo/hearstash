@@ -11,7 +11,9 @@
 //
 // On Linux it runs grim, which works on wlroots desktops (Hyprland, Sway);
 // on Hyprland it asks hyprctl which monitor has the focus, and elsewhere
-// takes all of them. On Windows, the GDI capture isn't done yet.
+// takes all of them. On Windows it copies the monitor with the foreground
+// window through GDI, once a window of the app's has opened (which makes
+// the app DPI-aware, so the monitor's size is in real pixels).
 //
 // DRM-protected video (Netflix and the like) comes out black whatever
 // takes the screenshot. That's the system's choice, and this doesn't try
