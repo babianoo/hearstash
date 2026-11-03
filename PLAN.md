@@ -5,12 +5,11 @@ class. It grew out of the "rolling audio buffer" experiment in Japanese
 Helper, and takes ideas from Yomitan and from mining cards with mpv +
 mpvacious.
 
-**Status (November 2026): the Linux side is complete.** Phases 1–7
-work on Linux (PulseAudio or PipeWire, a wlroots desktop like Hyprland
-for screenshots). What's left are the Windows parts, listed under
-"Left for Windows" below and marked `TODO(Windows)` in the code. Until
-they're done, the Windows build runs as before, and the rolling buffer
-says it isn't done on Windows yet.
+**Status (November 2026): phases 1–7 work on Linux and Windows.** On
+Linux with PulseAudio or PipeWire, and a wlroots desktop like Hyprland
+for screenshots; on Windows with WASAPI loopback, `RegisterHotKey` and
+GDI. What's still to check on Windows by hand is listed under "Windows"
+below.
 
 ## What the user does
 
@@ -90,7 +89,17 @@ whether the default output changed, moving to the new one. The ring is
 `SampleRing` (src/core/sample_ring.h) with `GapDetector` for the silence,
 tested in tests/sample_ring_test.cpp. `Capturer` (src/ui/capturer.h)
 runs it from startup; Settings > Buffer turns it on or off and sets the
-length. **Windows: left** (WASAPI loopback in `AudioBuffer::open_device`).
+length.
+
+**Windows: done.** `ma_device_type_loopback` on WASAPI, which miniaudio
+moves to the new default output by itself, so `follow_default_output`
+does nothing there. WASAPI sends nothing while nothing plays, so two
+more things count that time as silence: the `GapDetector` is started
+when recording starts (otherwise a quiet start would vanish once the
+first sound came), and `snapshot()` adds the silence since the last
+chunk (otherwise a capture taken during a pause would end at the last
+sound, not now). Tried with an inaudible tone: it lands where it was
+played, with the quiet before and after kept as silence.
 
 ### 2. Global hotkey
 
@@ -112,8 +121,20 @@ desktop owns the shortcut: the user binds a key to `prototype --capture`
 hyprland.conf), which passes the press to the running app through a
 socket in `$XDG_RUNTIME_DIR`. Settings > Buffer shows the command with
 the right path. This works on X11 desktops too, so no `XGrabKey` was
-needed. **Windows: left** (`RegisterHotKey`, src/ui/global_hotkey.cpp,
-and a setting for the key combination).
+needed.
+
+**Windows: done, a little differently.** `RegisterHotKey` on a hidden
+message-only window of its own instead of the main window's HWND: the
+capturer starts before the main window exists, and a window's messages
+still arrive during Windows' own message loops (e.g. while a window is
+dragged), where thread messages are lost. The key is a setting
+(src/core/shortcut.h, tested), `Win+Alt+C` by default: nothing on
+Windows 11 uses it, and it has no AltGr in it, which types letters
+like ć in some layouts. Settings > Buffer takes a new one from the keys
+pressed in its box, and pauses the old one meanwhile. A key that's
+taken is reported there. `prototype --capture` works on Windows too,
+by posting to that window, and a second copy of the app is told the
+first one has the shortcut.
 
 ### 3. Capture window: waveform, selection, playback
 
@@ -201,8 +222,13 @@ JPEG goes through libjpeg-turbo, which FLTK already uses, instead of
 session that built this; either works), and the shrinking before saving
 is a small averaging filter in src/core/image.cpp. The crop is kept as
 fractions of the screenshot, so it still fits after a resolution change.
-**Windows: left** (the GDI capture in `take_screenshot`,
-src/core/screenshot.cpp). The crop view and JPEG code are shared.
+
+**Windows: done.** A GDI `BitBlt`
+of the monitor with the foreground window, in real pixels, since FLTK
+makes the app per-monitor DPI-aware when its first window opens. About
+30 ms for 1920x1080. Still to try: video in a browser and in mpv, to
+see whether any comes out black, which would mean DXGI Desktop
+Duplication. The crop view and JPEG code are shared.
 
 ### 7. Add to Anki
 
@@ -235,21 +261,23 @@ then `[sound:...]` and `<img alt="snapshot">`, in whichever fields the
 settings say. Jisho has no pitch accents, word audio or conjugations,
 so those parts of the template stay empty.
 
-### Left for Windows
+### Windows
 
-Each is marked `TODO(Windows)` in the code:
+Done (November 2026), and tried on Windows 11 with MinGW and vcpkg
+(x64-mingw-static). Building takes libjpeg-turbo (vcpkg's
+`libjpeg-turbo`, or MSYS2's `mingw-w64-x86_64-libjpeg-turbo`) for CMake
+to find, but an FLTK built with its bundled libjpeg puts that one's
+headers first, and the app then uses it. The two declare
+`jpeg_mem_dest`'s size differently, which src/core/image.cpp allows for.
 
-- `AudioBuffer::open_device` (src/core/audio_buffer.cpp):
-  `ma_device_type_loopback` on WASAPI, which follows the default output
-  by itself, so `follow_default_output` can stay a no-op there.
-- `GlobalHotkey` (src/ui/global_hotkey.cpp): `RegisterHotKey` and
-  `WM_HOTKEY`, plus a setting for the key combination on the Buffer
-  page, which shows the `--capture` command only on Linux.
-  `send_hotkey_press` and `capture_command` aren't needed there.
-- `take_screenshot` (src/core/screenshot.cpp): the GDI capture, then
-  DXGI if video comes out black.
-- Building: libjpeg-turbo is a new dependency (MSYS2:
-  `mingw-w64-x86_64-libjpeg-turbo`).
+Still to try by hand:
+
+- A capture of a real line, with sound playing: the waveform, the
+  transcript, and a card in a running Anki (also untried on Linux).
+- Screenshots of video in a browser and in mpv: if any is black, switch
+  to DXGI Desktop Duplication.
+- Plugging in headphones while it records, to see miniaudio follow the
+  new default output.
 
 ### Later
 
@@ -306,7 +334,7 @@ To `src/core/settings.h`, as new categories in the settings window:
   hotkey, the default selection length, dictation mode on/off.
 - **Anki**: deck, note type, field mapping, the last crop rectangle.
 
-Done, except the hotkey (Windows) and dictation mode (not built).
+Done, except dictation mode (not built).
 
 ## Privacy
 
