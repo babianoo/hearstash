@@ -10,6 +10,14 @@
 // libjpeg (libjpeg-turbo). Its header needs size_t and FILE declared first.
 #include <jpeglib.h>
 
+// What jpeg_mem_dest takes the output's size as: unsigned long in
+// libjpeg-turbo, size_t in the libjpeg bundled with FLTK, whose headers
+// come first when the app is built with it. The two differ on 64-bit
+// Windows.
+template <typename F> struct MemDestSize;
+template <typename T> struct MemDestSize<void(j_compress_ptr, unsigned char**, T*)> { using type = T; };
+using JpegSize = MemDestSize<decltype(jpeg_mem_dest)>::type;
+
 Image crop(const Image& image, Rect rect){
     const int x0 = std::clamp(rect.x, 0, image.width), y0 = std::clamp(rect.y, 0, image.height);
     const int x1 = std::clamp(rect.x + rect.w, x0, image.width), y1 = std::clamp(rect.y + rect.h, y0, image.height);
@@ -68,7 +76,7 @@ struct JpegError {
 // Only C-style locals here, since longjmp skips destructors. On success
 // *buffer is malloc'd for the caller to free. Returns false on failure,
 // with error.message saying why.
-static bool compress(const Image& image, int quality, unsigned char** buffer, unsigned long* size, JpegError& error){
+static bool compress(const Image& image, int quality, unsigned char** buffer, JpegSize* size, JpegError& error){
     jpeg_compress_struct cinfo;
     cinfo.err = jpeg_std_error(&error.manager);
     error.manager.error_exit = jump_back;
@@ -102,7 +110,7 @@ std::vector<std::uint8_t> encode_jpeg(const Image& image, int quality){
     if (image.empty()) throw std::runtime_error("Couldn't save the picture as JPEG: it's empty");
 
     unsigned char* buffer = nullptr;
-    unsigned long size = 0;
+    JpegSize size = 0;
     JpegError error{};
     const bool ok = compress(image, quality, &buffer, &size, error);
     std::vector<std::uint8_t> bytes;
