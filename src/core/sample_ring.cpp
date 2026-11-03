@@ -49,6 +49,13 @@ std::vector<float> SampleRing::snapshot(size_t count) const {
     }
 }
 
+void GapDetector::start(double now){
+    if (started) return;
+    started = true;
+    origin = now;
+    counted = 0;
+}
+
 std::uint64_t GapDetector::silence_before(double now, size_t count){
     if (!started){
         // The first chunk ends now

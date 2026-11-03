@@ -1,5 +1,7 @@
 #include "core/audio_buffer.h"
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <format>
 #include <stdexcept>
@@ -14,8 +16,10 @@
 // to AudioBuffer, since on_audio isn't a member.
 struct Capture {
     SampleRing ring;
-    // Only the audio thread uses it
+    // Only the audio thread uses it, once recording
     GapDetector gaps{AudioBuffer::SAMPLE_RATE};
+    // When the last chunk arrived, or recording started, in clock_seconds()
+    std::atomic<double> heard_at{0};
 
     explicit Capture(int seconds)
         : ring(static_cast<size_t>(seconds + AudioBuffer::MARGIN_SECONDS) * AudioBuffer::SAMPLE_RATE){}
@@ -27,22 +31,29 @@ struct AudioBuffer::Impl {
     // Whether device is initialized, i.e. recording
     bool open = false;
     Backend backend;
-    // The output whose monitor device records, by PulseAudio's name for it
+    // The output whose monitor device records, by PulseAudio's name for it.
+    // Unused on Windows, where miniaudio follows the default output.
     std::string output;
     // Replaced whenever what was recorded is forgotten. Only touched while
     // the device is closed.
     std::unique_ptr<Capture> capture;
 };
 
+// The time in seconds, from a fixed point
+static double clock_seconds(){
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 // miniaudio calls it on its own thread with each chunk of audio, already
 // converted to 48 kHz mono floats. It mustn't block or allocate.
 static void on_audio(ma_device* device, void*, const void* input, ma_uint32 count){
     auto* capture = static_cast<Capture*>(device->pUserData);
-    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    const double now = clock_seconds();
 
     if (const std::uint64_t silence = capture->gaps.silence_before(now, count))
         capture->ring.write_silence(static_cast<size_t>(silence));
     capture->ring.write({static_cast<const float*>(input), count});
+    capture->heard_at.store(now, std::memory_order_relaxed);
 }
 
 AudioBuffer::AudioBuffer(int seconds, Backend backend) : length(seconds), impl(std::make_unique<Impl>()){
@@ -55,16 +66,21 @@ AudioBuffer::AudioBuffer(int seconds, Backend backend) : length(seconds), impl(s
     config.pulse.pApplicationName = "Prototype";
 
     ma_backend null_backend[] = {ma_backend_null};
+#ifdef _WIN32
+    // Only WASAPI has loopback, which records what an output plays
+    ma_backend system_backend[] = {ma_backend_wasapi};
+    constexpr const char* NEEDS = "Recording what the computer plays needs WASAPI";
+#else
     // Only PulseAudio's monitor devices record what's played. ALSA has no
     // such thing, and neither does JACK.
-    ma_backend pulse_backend[] = {ma_backend_pulseaudio};
+    ma_backend system_backend[] = {ma_backend_pulseaudio};
+    constexpr const char* NEEDS = "Recording what the computer plays needs PulseAudio, or PipeWire with its PulseAudio server";
+#endif
     const ma_result result = backend == Backend::Null
         ? ma_context_init(null_backend, 1, &config, &impl->context)
-        : ma_context_init(pulse_backend, 1, &config, &impl->context);
+        : ma_context_init(system_backend, 1, &config, &impl->context);
     if (result != MA_SUCCESS)
-        throw std::runtime_error(std::format(
-            "Recording what the computer plays needs PulseAudio, or PipeWire with its PulseAudio server: {}",
-            ma_result_description(result)));
+        throw std::runtime_error(std::format("{}: {}", NEEDS, ma_result_description(result)));
 }
 
 AudioBuffer::~AudioBuffer(){
@@ -72,6 +88,7 @@ AudioBuffer::~AudioBuffer(){
     ma_context_uninit(&impl->context);
 }
 
+#ifndef _WIN32
 // PulseAudio's name for the default output, e.g.
 // "alsa_output.pci-0000_00_1f.3.analog-stereo". Empty if there's none.
 static std::string default_output(ma_context& context){
@@ -85,19 +102,27 @@ static std::string default_output(ma_context& context){
         if (playback[i].isDefault) return playback[i].id.pulse;
     return "";
 }
+#endif
 
 void AudioBuffer::open_device(){
 #ifdef _WIN32
-    // TODO(Windows): ma_device_type_loopback on WASAPI, which records the
-    // default output and follows it when it changes
-    throw std::runtime_error("Recording what the computer plays isn't done on Windows yet");
+    // Loopback records what the default output plays. WASAPI only sends
+    // anything while something plays, which the GapDetector turns into
+    // silence. miniaudio moves it to the new default output by itself.
+    // The null backend has no loopback, so it records its silent default
+    // capture device instead.
+    const ma_device_type type = impl->backend == Backend::System ? ma_device_type_loopback : ma_device_type_capture;
 #else
-    ma_device_config config = ma_device_config_init(ma_device_type_capture);
+    const ma_device_type type = ma_device_type_capture;
+#endif
+    ma_device_config config = ma_device_config_init(type);
     config.capture.format = ma_format_f32;
     config.capture.channels = 1;
     config.sampleRate = SAMPLE_RATE;
     config.dataCallback = on_audio;
     config.pUserData = impl->capture.get();
+
+#ifndef _WIN32
     config.pulse.pStreamNameCapture = "Rolling buffer of what's playing";
 
     // Every output has a monitor device, which records what it plays.
@@ -111,10 +136,17 @@ void AudioBuffer::open_device(){
         monitor.copy(id.pulse, monitor.size());
         config.capture.pDeviceID = &id;
     }
+#endif
 
     ma_result result = ma_device_init(&impl->context, &config, &impl->device);
     if (result != MA_SUCCESS)
         throw std::runtime_error(std::format("Couldn't record what the computer plays: {}", ma_result_description(result)));
+
+    // Before the audio thread starts. Time with nothing playing counts from
+    // now, even if nothing plays at first.
+    const double now = clock_seconds();
+    impl->capture->gaps.start(now);
+    impl->capture->heard_at.store(now, std::memory_order_relaxed);
 
     result = ma_device_start(&impl->device);
     if (result != MA_SUCCESS){
@@ -123,7 +155,6 @@ void AudioBuffer::open_device(){
                                              ma_result_description(result)));
     }
     impl->open = true;
-#endif
 }
 
 void AudioBuffer::close_device(){
@@ -160,10 +191,25 @@ void AudioBuffer::set_seconds(int seconds){
 }
 
 std::vector<float> AudioBuffer::snapshot() const {
-    return impl->capture->ring.snapshot(static_cast<size_t>(length) * SAMPLE_RATE);
+    const size_t wanted = static_cast<size_t>(length) * SAMPLE_RATE;
+    // Nothing arrived lately, e.g. WASAPI's loopback while nothing plays.
+    // That silence is only written once the next chunk arrives, so it's
+    // added here, and the capture still ends now.
+    size_t silence = 0;
+    if (impl->open){
+        const double quiet = clock_seconds() - impl->capture->heard_at.load(std::memory_order_relaxed);
+        if (quiet > GapDetector::GAP) silence = std::min(wanted, static_cast<size_t>(quiet * SAMPLE_RATE));
+    }
+    std::vector<float> audio = impl->capture->ring.snapshot(wanted - silence);
+    audio.resize(audio.size() + silence, 0.0f);
+    return audio;
 }
 
 void AudioBuffer::follow_default_output(){
+#ifdef _WIN32
+    // miniaudio's WASAPI backend already does, as soon as it changes
+    return;
+#else
     if (!impl->open || impl->backend != Backend::System) return;
     const std::string output = default_output(impl->context);
     if (output.empty() || output == impl->output) return;
@@ -171,4 +217,5 @@ void AudioBuffer::follow_default_output(){
     // with silence
     close_device();
     open_device();
+#endif
 }

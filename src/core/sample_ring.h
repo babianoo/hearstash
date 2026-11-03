@@ -65,6 +65,11 @@ public:
 
     explicit GapDetector(int sample_rate) : rate(sample_rate) {}
 
+    // Counts time from now, before any chunk has arrived, so that waiting
+    // for the first sound is silence too. Without it, time is counted from
+    // the first chunk. Does nothing once it has started.
+    void start(double now);
+
     // Called with each chunk as it arrives, before writing it: now is the
     // time in seconds, from any fixed starting point, and count the chunk's
     // samples. Returns how many samples of silence to write before it.

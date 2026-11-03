@@ -125,6 +125,21 @@ static void test_gap_after_burst(){
     CHECK(silence > 47500 && silence < 48500);
 }
 
+// Started before the first chunk: the wait for it is a gap too
+static void test_gap_before_first(){
+    GapDetector gaps(48000);
+    gaps.start(10.0);
+    // Started again once running: ignored
+    gaps.start(11.0);
+    const std::uint64_t silence = gaps.silence_before(13.0, 480);
+    CHECK(silence > 47900 * 3 - 480 && silence < 48100 * 3 - 480);
+    CHECK(gaps.silence_before(13.01, 480) == 0);
+
+    // Not started: the first chunk starts the clock
+    GapDetector unstarted(48000);
+    CHECK(unstarted.silence_before(13.0, 480) == 0);
+}
+
 int main(){
     test_empty();
     test_less_than_asked();
@@ -135,6 +150,7 @@ int main(){
     test_gap_steady();
     test_gap_filled();
     test_gap_after_burst();
+    test_gap_before_first();
     if (failures == 0) std::puts("All sample ring tests passed");
     return failures;
 }

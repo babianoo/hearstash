@@ -9,8 +9,8 @@
 // silence, so the last 30 seconds are always the last 30 seconds of time.
 //
 // On Linux it records the default output's monitor, through PulseAudio
-// or PipeWire's PulseAudio server. On Windows, WASAPI's loopback isn't
-// done yet, and start() throws.
+// or PipeWire's PulseAudio server. On Windows it records the default
+// output through WASAPI's loopback.
 //
 // Everything is called from one thread, the UI thread in the app. The
 // audio arrives on a thread of miniaudio's, which only writes into memory
@@ -25,7 +25,7 @@ public:
     static constexpr int MARGIN_SECONDS = 2;
 
     enum class Backend {
-        // PulseAudio on Linux
+        // PulseAudio on Linux, WASAPI on Windows
         System,
         // A pretend output that plays silence, for tests
         Null,
@@ -43,7 +43,7 @@ public:
 
     // Starts recording what the default output plays. Does nothing if it's
     // already recording. Throws std::runtime_error if it can't, e.g. on a
-    // system without PulseAudio.
+    // Linux system without PulseAudio, or with no output at all.
     void start();
     // Stops recording, and forgets what was recorded: it's never kept
     // longer than it has to be
@@ -62,7 +62,7 @@ public:
     // Restarts recording if the default output changed since it started,
     // e.g. headphones were plugged in, so it records the one that's
     // playing. What was recorded is kept. Call every few seconds. Throws
-    // like start().
+    // like start(). Does nothing on Windows, where that happens by itself.
     void follow_default_output();
 
 private:
