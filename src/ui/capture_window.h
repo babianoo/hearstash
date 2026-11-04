@@ -31,7 +31,8 @@ struct TextSpan;
 // can be changed by dragging, and played back with Space or the Play
 // button. Enter (or the Transcribe button) turns it into text with
 // whisper, shown under the waveform; Escape then cancels. Selecting part
-// of the text with the mouse looks it up on Jisho, in a panel beside it.
+// of the text with the mouse looks it up on Jisho, in a panel beside it;
+// Translate (Ctrl+T) shows the whole line's DeepL translation there.
 // Add to Anki (Ctrl+N) then opens a card with the word, the line, the
 // selected audio and the screenshot taken with the capture.
 //
@@ -77,6 +78,13 @@ private:
         std::vector<JishoEntry> entries{};
         std::string error{};    // Non-empty if it failed
     };
+    // What a translation thread hands back to the UI thread
+    struct TranslationResult {
+        CaptureWindow* win;
+        unsigned id;
+        std::string translation{};
+        std::string error{};    // Non-empty if it failed
+    };
     // What a job hands back to the UI thread
     struct JobResult {
         CaptureWindow* win;
@@ -100,6 +108,7 @@ private:
     Fl_Box* selection_info = nullptr;
     Fl_Button* transcribe_btn = nullptr;
     Fl_Button* anki_btn = nullptr;
+    Fl_Button* translate_btn = nullptr;
     // The transcript, or what to do to get one. transcript_text is
     // transcript's only child.
     SmoothScroll* transcript = nullptr;
@@ -131,7 +140,8 @@ private:
     unsigned next_job_id = 1;
     // The job whose transcript is awaited, or 0 if none
     unsigned transcribing = 0;
-    // Bumped on every lookup. Only the latest one's result is shown.
+    // Bumped on every lookup and translation, which share the panel. Only
+    // the latest one's result is shown.
     unsigned latest_lookup = 0;
 
     // Static because FLTK callbacks are plain functions; the CaptureWindow
@@ -139,6 +149,7 @@ private:
     static void on_play(Fl_Widget* w, void* data);
     static void on_transcribe(Fl_Widget* w, void* data);
     static void on_add_to_anki(Fl_Widget* w, void* data);
+    static void on_translate(Fl_Widget* w, void* data);
     // The window's close button and Escape
     static void on_close(Fl_Widget* w, void* data);
     // Many times a second while playing: moves the playhead, and notices
@@ -148,6 +159,9 @@ private:
     static void on_job_done(void* data);
     // Runs on the UI thread, called by Fl::awake() from a lookup thread
     static void on_lookup_done(void* data);
+    // Runs on the UI thread, called by Fl::awake() from a translation
+    // thread
+    static void on_translation_done(void* data);
 
     void play();
     void stop_playing();
@@ -158,7 +172,8 @@ private:
     void transcribe();
     // Stops waiting for the transcript there is, if there is one
     void cancel_transcription();
-    // Shows the Transcribe and Add to Anki buttons as they should be now
+    // Shows the Transcribe, Add to Anki and Translate buttons as they
+    // should be now
     void refresh_transcribe_button();
     // Opens the card window with what's shown
     void add_to_anki();
@@ -167,6 +182,8 @@ private:
     void show_note(const std::string& note);
     // Looks up what's selected in the transcript, if it's worth it
     void look_up_selection();
+    // Translates the transcript with DeepL, into the lookup panel
+    void translate();
     // Replaces what the lookup panel shows
     void show_lookup(const std::vector<TextSpan>& spans);
 };

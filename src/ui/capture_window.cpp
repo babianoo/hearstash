@@ -12,6 +12,7 @@
 #include <FL/Fl_Button.H>
 
 #include "core/clip_player.h"
+#include "core/deepl.h"
 #include "core/lookup_text.h"
 #include "core/resample.h"
 #include "core/settings.h"
@@ -32,6 +33,7 @@ static constexpr int WAVEFORM_H = 160;
 static constexpr int BTN_W = 90, BTN_H = 28;
 static constexpr int TRANSCRIBE_W = 130;
 static constexpr int ANKI_W = 120;
+static constexpr int TRANSLATE_W = 100;
 // The transcript's width; the lookup panel takes the rest
 static constexpr int TRANSCRIPT_W = 360;
 // Seconds between playhead moves while playing
@@ -63,9 +65,17 @@ CaptureWindow::CaptureWindow(SettingsStore& settings, SharedTranscriber& transcr
 
     const int transcribe_x = MARGIN + inner_w - TRANSCRIBE_W;
     const int anki_x = transcribe_x - MARGIN - ANKI_W;
-    selection_info = new Fl_Box(MARGIN + BTN_W + MARGIN, row_y, anki_x - BTN_W - 3 * MARGIN, BTN_H);
+    const int translate_x = anki_x - MARGIN - TRANSLATE_W;
+    selection_info = new Fl_Box(MARGIN + BTN_W + MARGIN, row_y, translate_x - BTN_W - 3 * MARGIN, BTN_H);
     selection_info->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     selection_info->labelcolor(DIM);
+
+    translate_btn = new Fl_Button(translate_x, row_y, TRANSLATE_W, BTN_H, "Translate");
+    translate_btn->box(FL_ROUND_UP_BOX);
+    translate_btn->clear_visible_focus();
+    translate_btn->tooltip("Translate this line with DeepL (Ctrl+T)");
+    translate_btn->shortcut(FL_CTRL | 't');
+    translate_btn->callback(on_translate, this);
 
     transcribe_btn = new Fl_Button(transcribe_x, row_y, TRANSCRIBE_W, BTN_H);
     transcribe_btn->box(FL_ROUND_UP_BOX);
@@ -171,6 +181,8 @@ void CaptureWindow::refresh_transcribe_button(){
     // A card needs something to show on its front
     if (transcript_shown.empty() || begin == end) anki_btn->deactivate();
     else anki_btn->activate();
+    if (transcript_shown.empty()) translate_btn->deactivate();
+    else translate_btn->activate();
 }
 
 void CaptureWindow::on_play(Fl_Widget*, void* data){
@@ -371,6 +383,52 @@ void CaptureWindow::on_lookup_done(void* data){
         self->show_lookup({{std::format("Nothing found for {}. Try selecting less, or the word's dictionary form.",
                                         result->keyword), NOTE}});
     else self->show_lookup(format_entries(result->entries));
+}
+
+void CaptureWindow::on_translate(Fl_Widget*, void* data){
+    static_cast<CaptureWindow*>(data)->translate();
+}
+
+void CaptureWindow::translate(){
+    if (transcript_shown.empty()) return;
+
+    // Copied for the thread, since the settings may change while it runs
+    std::string key = effective_deepl_key(settings.get());
+    if (key.empty()){
+        // Modal: waits for OK before returning
+        fl_alert("No DeepL API key found.\n\n"
+                 "Input the DeepL key in the settings or "
+                 "set the DEEPL_API_KEY environment variable to use DeepL.");
+        return;
+    }
+
+    // Takes the panel's place from a lookup still running. The word
+    // looked up is still what a card gets.
+    const unsigned id = ++latest_lookup;
+    show_lookup({{"Translating...", NOTE}});
+
+    // Like a lookup: on a thread that only hands its result back
+    std::thread([this, id, text = transcript_shown, key = std::move(key)]{
+        auto* result = new TranslationResult{.win = this, .id = id};
+        try {
+            result->translation = deepl_translate(text, key);
+        } catch (const std::exception& e){
+            result->error = e.what();
+        }
+        Fl::awake(on_translation_done, result);
+    }).detach();
+}
+
+void CaptureWindow::on_translation_done(void* data){
+    // unique_ptr so result is deleted when this returns
+    std::unique_ptr<TranslationResult> result(static_cast<TranslationResult*>(data));
+    CaptureWindow* self = result->win;
+    // A lookup started since, or the text changed
+    if (result->id != self->latest_lookup) return;
+
+    if (!result->error.empty())
+        self->show_lookup({{std::format("Couldn't translate: {}", result->error), NOTE}});
+    else self->show_lookup({{result->translation}});
 }
 
 void CaptureWindow::show_lookup(const std::vector<TextSpan>& spans){
