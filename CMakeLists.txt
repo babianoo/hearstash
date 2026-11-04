@@ -93,6 +93,7 @@ add_executable(hearstash
     src/core/time_ranges.cpp
     src/core/transcriber.cpp
     src/core/whisper_models.cpp
+    src/ui/bring_to_front.cpp
     src/ui/capture_window.cpp
     src/ui/card_window.cpp
     src/ui/capturer.cpp

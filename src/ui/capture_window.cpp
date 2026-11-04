@@ -18,6 +18,7 @@
 #include "core/settings.h"
 #include "core/transcriber.h"
 #include "core/whisper_models.h"
+#include "ui/bring_to_front.h"
 #include "ui/card_window.h"
 #include "ui/jisho_format.h"
 #include "ui/settings_store.h"
@@ -126,6 +127,7 @@ CaptureWindow::CaptureWindow(SettingsStore& settings, SharedTranscriber& transcr
 
 CaptureWindow::~CaptureWindow(){
     Fl::remove_timeout(on_play_tick, this);
+    stop_bringing_to_front(win);
     // jobs then goes with the members, stopping and joining each thread.
     // Their results are never handled: Fl::run() has returned by now.
 }
@@ -158,6 +160,8 @@ void CaptureWindow::open(std::vector<float> new_audio, int new_rate, int selecti
     // a window that's shown anew comes up in front, with the focus
     if (win.shown()) win.hide();
     win.show();
+    // On Windows that isn't enough, e.g. over a fullscreen game
+    bring_to_front(win);
 }
 
 void CaptureWindow::refresh_selection(){
