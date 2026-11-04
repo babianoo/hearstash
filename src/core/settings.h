@@ -10,11 +10,22 @@
 // the file:
 //
 //   {"anki": {"deck": "Mining"}, "api": {"deepl_key": "..."},
-//    "buffer": {"seconds": 30}, "history": {"capacity": 100},
+//    "buffer": {"seconds": 30}, "general": {"scroll_speed": 30},
+//    "history": {"capacity": 100},
 //    "speech": {"whisper_model": "small"}, "version": 1}
 //
 // The field names are the JSON keys, so renaming one changes the file
 // format. A field's default is what it gets when the file doesn't have it.
+
+// The General category
+struct GeneralSettings {
+    // Pixels a scrolling area moves per notch of the mouse wheel. Between
+    // MIN_SCROLL_SPEED and MAX_SCROLL_SPEED.
+    int scroll_speed = 30;
+
+    static constexpr int MIN_SCROLL_SPEED = 4;
+    static constexpr int MAX_SCROLL_SPEED = 100;
+};
 
 // The API category
 struct ApiSettings {
@@ -90,6 +101,7 @@ struct Settings {
     AnkiSettings anki;
     ApiSettings api;
     BufferSettings buffer;
+    GeneralSettings general;
     HistorySettings history;
     SpeechSettings speech;
 };

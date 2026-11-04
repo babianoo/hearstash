@@ -29,9 +29,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AnkiSettings, deck, note_type, w
                                                 picture_quality, crop_x, crop_y, crop_w, crop_h)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds, shortcut)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralSettings, scroll_speed)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model, input_device)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, anki, api, buffer, history, speech)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, anki, api, buffer, general, history, speech)
 
 Settings load_settings(const fs::path& file){
     std::ifstream in(file);
@@ -65,6 +66,8 @@ void sanitize(Settings& settings){
     key.erase(0, key.find_first_not_of(" \t\r\n"));
 
     // E.g. edited by hand
+    int& scroll_speed = settings.general.scroll_speed;
+    scroll_speed = std::clamp(scroll_speed, GeneralSettings::MIN_SCROLL_SPEED, GeneralSettings::MAX_SCROLL_SPEED);
     int& capacity = settings.history.capacity;
     capacity = std::clamp(capacity, HistorySettings::MIN_CAPACITY, HistorySettings::MAX_CAPACITY);
     BufferSettings& buffer = settings.buffer;

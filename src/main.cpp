@@ -22,6 +22,7 @@
 #include "ui/model_downloader.h"
 #include "ui/settings_store.h"
 #include "ui/shared_transcriber.h"
+#include "ui/smooth_scroll.h"
 
 int main(int argc, char** argv){
     // Run by the key the user bound to it: passes the press on to the app
@@ -60,6 +61,10 @@ int main(int argc, char** argv){
     // That's once Fl::run() returns, and it then saves a change still
     // waiting to be saved.
     SettingsStore settings(config_dir() / "settings.json");
+    // Every scrolling area's wheel speed, now and after each change. The
+    // listener only calls into settings, so it never has to be removed.
+    SmoothScroll::set_wheel_step(settings.get().general.scroll_speed);
+    settings.add_listener([&settings]{ SmoothScroll::set_wheel_step(settings.get().general.scroll_speed); });
     // The same goes for it. Owned here rather than by a window, so a
     // download keeps going while the settings window is closed. Quitting
     // cancels the downloads still running.

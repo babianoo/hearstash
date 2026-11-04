@@ -18,6 +18,10 @@ public:
     SmoothScroll(int x, int y, int w, int h);
     ~SmoothScroll() override;
 
+    // Pixels every SmoothScroll moves per notch of the mouse wheel, from
+    // then on. UI thread only.
+    static void set_wheel_step(int pixels);
+
     int handle(int event) override;
     void draw() override;
 

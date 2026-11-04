@@ -35,7 +35,8 @@ struct WhisperModel;
 // plays: whether it records, how long, whether it's recording now, and
 // the capture shortcut (on Linux, the command to bind to a key). The Anki page has the deck and
 // note type to add cards to, which field gets each part of a card, both
-// listed from Anki, and the picture's quality. The General page is empty.
+// listed from Anki, and the picture's quality. The General page has the
+// mouse wheel's scroll speed.
 //
 // Changes go into the SettingsStore it was given as they're made, which
 // saves them: there's no Apply button.
@@ -93,6 +94,8 @@ private:
     std::vector<Fl_Button*> categories;
     // All in the same spot, right of the sidebar; only one is shown
     std::vector<Fl_Group*> pages;
+    // On the General page. Applied like capacity_input.
+    ClipboardInput* scroll_speed_input = nullptr;
     // On the History page. How many searches there are is shown next to
     // the button that clears them.
     ClipboardInput* capacity_input = nullptr;
@@ -134,6 +137,7 @@ private:
     // SettingsWindow comes in through data.
     static void on_category(Fl_Widget* w, void* data);
     static void on_capacity(Fl_Widget* w, void* data);
+    static void on_scroll_speed(Fl_Widget* w, void* data);
     // The window's close button and Escape
     static void on_close(Fl_Widget* w, void* data);
     static void on_clear_history(Fl_Widget* w, void* data);
@@ -153,6 +157,7 @@ private:
 
     // Add a page's settings to the current group, a page starting at x
     // that's w wide
+    void add_general_settings(int x, int w);
     void add_history_settings(int x, int w);
     void add_api_settings(int x, int w);
     void add_speech_settings(int x, int w);
@@ -164,6 +169,8 @@ private:
     // Saves the number typed in capacity_input, and deletes the oldest
     // searches over it. Does nothing if it hasn't changed.
     void apply_capacity();
+    // Saves the scroll speed typed. Does nothing if it hasn't changed.
+    void apply_scroll_speed();
     // Hides or shows the key, and switches the button's icon to match
     void set_key_hidden(bool hidden);
     // Where in model_rows the row with widget w is

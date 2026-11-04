@@ -7,8 +7,9 @@
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
 
-// Pixels scrolled per wheel notch, about 1 line of text
-static constexpr int WHEEL_STEP = 8;
+// Pixels scrolled per wheel notch, from Settings > General. The same for
+// every SmoothScroll; set_wheel_step() changes it.
+static int wheel_step = 30;
 // Seconds between animation frames (60 fps)
 static constexpr double TICK = 1.0 / 60;
 
@@ -26,6 +27,10 @@ SmoothScroll::SmoothScroll(int x, int y, int w, int h) : Fl_Scroll(x, y, w, h){
     color(FL_BACKGROUND2_COLOR);
 }
 
+void SmoothScroll::set_wheel_step(int pixels){
+    wheel_step = pixels;
+}
+
 SmoothScroll::~SmoothScroll(){
     // A pending tick would otherwise run on a deleted widget
     Fl::remove_timeout(on_tick, this);
@@ -36,7 +41,7 @@ int SmoothScroll::handle(int event){
         // Spinning the wheel again mid-glide adds to where the glide is
         // heading, not to where the view is right now, so fast spins add up.
         const int from = gliding ? target_y : yposition();
-        target_y = std::clamp(from + Fl::event_dy() * WHEEL_STEP, 0, max_y());
+        target_y = std::clamp(from + Fl::event_dy() * wheel_step, 0, max_y());
 
         if (!gliding && target_y != yposition()){
             gliding = true;

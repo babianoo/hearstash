@@ -107,6 +107,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
     const int page_x = SIDEBAR_W, page_w = win.w() - SIDEBAR_W;
     for (size_t i = 0; i < std::size(CATEGORY_NAMES); ++i){
         Fl_Group* page = new Fl_Group(page_x, 0, page_w, win.h());
+        if (i == GENERAL) add_general_settings(page_x, page_w);
         if (i == HISTORY) add_history_settings(page_x, page_w);
         if (i == API) add_api_settings(page_x, page_w);
         if (i == SPEECH_TO_TEXT) add_speech_settings(page_x, page_w);
@@ -136,12 +137,56 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
 SettingsWindow::~SettingsWindow(){
     // E.g. typed, then the app quit from the main window. The stores
     // outlive the window, and save it after.
+    apply_scroll_speed();
     apply_capacity();
     apply_buffer_seconds();
     apply_quality();
     history.remove_listener(history_listener);
     downloader.remove_listener(downloader_listener);
     settings.remove_listener(settings_listener);
+}
+
+// The mouse wheel's scroll speed: a label, then the number with a note
+// right of it
+void SettingsWindow::add_general_settings(int x, int w){
+    const int left = x + MARGIN, right = x + w - MARGIN;
+    // Lines up with the first category in the sidebar, like the API page
+    int y = MARGIN + (CATEGORY_H - 20) / 2;
+
+    Fl_Box* label = new Fl_Box(left, y, right - left, 20, "Scroll speed");
+    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    y += label->h() + 4;
+
+    scroll_speed_input = new ClipboardInput(left, y, CAPACITY_W, PILL_H);
+    scroll_speed_input->type(FL_INT_INPUT);
+    scroll_speed_input->value(settings.get().general.scroll_speed);
+    // Like the capacity, only on Enter or leaving the box
+    scroll_speed_input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
+    scroll_speed_input->callback(on_scroll_speed, this);
+
+    Fl_Box* note = new Fl_Box(left + CAPACITY_W + 10, y, right - left - CAPACITY_W - 10, PILL_H);
+    note->copy_label(std::format("Pixels per wheel notch, from {} to {}.",
+                                 GeneralSettings::MIN_SCROLL_SPEED, GeneralSettings::MAX_SCROLL_SPEED).c_str());
+    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    note->labelsize(12);
+    note->labelcolor(DIM);
+}
+
+void SettingsWindow::on_scroll_speed(Fl_Widget*, void* data){
+    static_cast<SettingsWindow*>(data)->apply_scroll_speed();
+}
+
+void SettingsWindow::apply_scroll_speed(){
+    // Empty, or not a number: put back as it was
+    int speed = settings.get().general.scroll_speed;
+    try {
+        speed = std::stoi(scroll_speed_input->value());
+    } catch (const std::exception&){}
+
+    if (speed != settings.get().general.scroll_speed)
+        settings.update([speed](Settings& s){ s.general.scroll_speed = speed; });
+    // Clamped by update(), and shown that way
+    scroll_speed_input->value(settings.get().general.scroll_speed);
 }
 
 // How many searches to keep: a label, the number, and a note on what
@@ -214,6 +259,7 @@ void SettingsWindow::apply_capacity(){
 void SettingsWindow::on_close(Fl_Widget*, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
     // Typed but not applied yet: closing is done with it too
+    self->apply_scroll_speed();
     self->apply_capacity();
     self->apply_buffer_seconds();
     self->apply_quality();
@@ -362,8 +408,10 @@ void SettingsWindow::on_category(Fl_Widget* w, void* data){
 }
 
 void SettingsWindow::select(size_t i){
-    // Leaving the History, Buffer or Anki page is done with it too. The
-    // box keeps focus while hidden, so it wouldn't hear about it otherwise.
+    // Leaving the General, History, Buffer or Anki page is done with it
+    // too. The box keeps focus while hidden, so it wouldn't hear about it
+    // otherwise.
+    apply_scroll_speed();
     apply_capacity();
     apply_buffer_seconds();
     apply_quality();
