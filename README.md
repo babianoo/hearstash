@@ -2,6 +2,8 @@
 
 Turn words you hear into flashcards.
 
+![A line from a video is captured with Win+Alt+C, selected on the waveform, transcribed, looked up on Jisho and added to Anki](docs/capture.gif)
+
 A desktop app for learning Japanese from what you watch. It keeps the last
 few seconds of whatever your computer is playing (anime in mpv, a YouTube
 video, a stream). When you miss a line, press a shortcut and you can:
@@ -133,6 +135,10 @@ supported yet.
 5. To make a card, press **Add to Anki**, check the fields, crop the
    screenshot to the video (the last crop is remembered), and press
    **Add**. Cards are tagged `hearstash`.
+
+![The capture window: the selected line's waveform, its transcript with 映画 selected, and Jisho's entries for it](docs/lookup.png)
+
+![Add to Anki: the word, reading, meaning and sentence filled in, with the screenshot to crop](docs/card.png)
 
 ## Where files go
 
