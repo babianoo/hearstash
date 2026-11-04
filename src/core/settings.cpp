@@ -78,8 +78,21 @@ void sanitize(Settings& settings){
     const std::optional<Shortcut> shortcut = parse_shortcut(buffer.shortcut);
     buffer.shortcut = shortcut ? format_shortcut(*shortcut) : DEFAULT_SHORTCUT;
 
-    // A crop that doesn't fit in a screenshot is no crop
     AnkiSettings& anki = settings.anki;
+    // E.g. saved by a version that had no note type of its own, before one
+    // was chosen. The fields went with no note type, so they mean nothing.
+    if (anki.note_type.empty()){
+        const AnkiSettings defaults;
+        anki.note_type = defaults.note_type;
+        anki.word_field = defaults.word_field;
+        anki.reading_field = defaults.reading_field;
+        anki.meaning_field = defaults.meaning_field;
+        anki.sentence_field = defaults.sentence_field;
+        anki.audio_field = defaults.audio_field;
+        anki.picture_field = defaults.picture_field;
+    }
+
+    // A crop that doesn't fit in a screenshot is no crop
     anki.picture_quality = std::clamp(anki.picture_quality, AnkiSettings::MIN_QUALITY, AnkiSettings::MAX_QUALITY);
     const bool fits = anki.crop_x >= 0 && anki.crop_y >= 0 && anki.crop_w > 0 && anki.crop_h > 0
                    && anki.crop_x + anki.crop_w <= 1.0001 && anki.crop_y + anki.crop_h <= 1.0001;

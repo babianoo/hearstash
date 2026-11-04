@@ -74,6 +74,7 @@ add_executable(hearstash
     src/core/bad_file.cpp
     src/core/card_format.cpp
     src/core/clip_player.cpp
+    src/core/hearstash_note_type.cpp
     src/core/history.cpp
     src/core/http.cpp
     src/core/image.cpp

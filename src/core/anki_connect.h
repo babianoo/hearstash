@@ -19,6 +19,18 @@ std::vector<std::string> anki_model_names();
 // The fields of note type model, in order
 std::vector<std::string> anki_model_field_names(const std::string& model);
 
+// One kind of card a note type makes, as Anki's template syntax
+struct AnkiCardTemplate {
+    std::string name;   // e.g. "Card 1"
+    std::string front;  // e.g. "{{Front}}"
+    std::string back;   // e.g. "{{FrontSide}}<hr id=answer>{{Back}}"
+};
+
+// Adds a note type with these fields, in order, styled by css. Anki
+// refuses one whose name is taken.
+void anki_create_model(const std::string& name, const std::vector<std::string>& fields, const std::string& css,
+                       const std::vector<AnkiCardTemplate>& templates);
+
 struct AnkiNote {
     std::string deck;
     std::string model;

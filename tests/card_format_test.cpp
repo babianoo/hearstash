@@ -64,7 +64,9 @@ static void test_a_field_each(){
 }
 
 static void test_details(){
+    // Not the defaults, which fill a field each
     AnkiSettings s;
+    s.meaning_field = s.audio_field = s.picture_field = "";
     s.sentence_field = "Front";
     s.word_field = s.reading_field = "Back";
 

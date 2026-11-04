@@ -74,17 +74,19 @@ struct BufferSettings {
 
 // The Anki category: where captures are added as cards
 struct AnkiSettings {
-    // As Anki names them. Empty when none is chosen.
+    // As Anki names it. Empty when none is chosen.
     std::string deck;
-    std::string note_type;
+    // As Anki names it. The app's own, HEARSTASH_NOTE_TYPE, unless another
+    // is chosen; sanitize() puts it back when it's empty.
+    std::string note_type = "Hearstash";
     // The fields of note_type that get each part of a card. Empty for one
-    // that goes nowhere.
-    std::string word_field;
-    std::string reading_field;
-    std::string meaning_field;
-    std::string sentence_field;
-    std::string audio_field;
-    std::string picture_field;
+    // that goes nowhere. By default, the Hearstash note type's.
+    std::string word_field = "Word";
+    std::string reading_field = "Reading";
+    std::string meaning_field = "Meaning";
+    std::string sentence_field = "Sentence";
+    std::string audio_field = "Audio";
+    std::string picture_field = "Picture";
     // The picture's JPEG quality, from MIN_QUALITY to MAX_QUALITY: higher
     // is sharper, but takes more space in the collection
     int picture_quality = 85;

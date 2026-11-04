@@ -18,6 +18,7 @@
 #include <FL/Fl_SVG_Image.H>
 
 #include "core/anki_connect.h"
+#include "core/hearstash_note_type.h"
 #include "core/recorder.h"
 #include "core/settings.h"
 #include "core/whisper_models.h"
@@ -839,6 +840,17 @@ static std::vector<std::string> list_names(Fl_Choice& choice, std::vector<std::s
     return names;
 }
 
+// The fields of note_type, as Anki has them. The Hearstash note type has
+// its own until Anki has it, which is from its first card on.
+static std::vector<std::string> note_type_fields(const std::string& note_type){
+    try {
+        return anki_model_field_names(note_type);
+    } catch (const std::exception&){
+        if (note_type == HEARSTASH_NOTE_TYPE) return hearstash_fields();
+        throw;
+    }
+}
+
 void SettingsWindow::refresh_anki(){
     const AnkiSettings& saved = settings.get().anki;
     std::vector<std::string> decks, note_types;
@@ -856,12 +868,17 @@ void SettingsWindow::refresh_anki(){
     anki_status->redraw();
     anki_listed = true;
 
+    // Always there to choose, even before Anki has it
+    const bool anki_has_saved = std::ranges::find(note_types, saved.note_type) != note_types.end();
+    if (std::ranges::find(note_types, HEARSTASH_NOTE_TYPE) == note_types.end())
+        note_types.insert(note_types.begin(), HEARSTASH_NOTE_TYPE);
+
     deck_names = list_names(*deck_choice, decks, saved.deck, nullptr);
     note_type_names = list_names(*note_type_choice, note_types, saved.note_type, nullptr);
     field_names.clear();
-    if (!saved.note_type.empty() && std::ranges::find(note_types, saved.note_type) != note_types.end()){
+    if (anki_has_saved || saved.note_type == HEARSTASH_NOTE_TYPE){
         try {
-            field_names = anki_model_field_names(saved.note_type);
+            field_names = note_type_fields(saved.note_type);
         } catch (const std::exception&){
             // Only the saved ones are listed then
         }
@@ -893,7 +910,7 @@ void SettingsWindow::on_note_type_chosen(Fl_Widget*, void* data){
     if (note_type == self->settings.get().anki.note_type) return;
 
     try {
-        self->field_names = anki_model_field_names(note_type);
+        self->field_names = note_type_fields(note_type);
     } catch (const std::exception& e){
         self->field_names.clear();
         fl_alert("Couldn't list the note type's fields:\n\n%s", e.what());

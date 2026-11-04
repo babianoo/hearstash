@@ -113,8 +113,11 @@ Everything is in **Settings**:
   keeps (and how much of the end is selected when a capture opens), and
   set the capture shortcut.
 - **Anki**: choose the deck and note type, and which field gets the word,
-  reading, meaning, sentence, audio and picture. Fields are guessed from
-  their names. Needs Anki running with the
+  reading, meaning, sentence, audio and picture. The note type is
+  Hearstash's own unless you pick another: the sentence on the front, the
+  word, meaning, audio and picture on the back, in large Japanese type. It's
+  added to Anki with your first card. With another note type, fields are
+  guessed from their names. Needs Anki running with the
   [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on.
 - **API**: your DeepL key (free or Pro). It can also come from the
   `DEEPL_API_KEY` environment variable, which is never saved.

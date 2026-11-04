@@ -14,6 +14,7 @@
 
 #include "core/anki_connect.h"
 #include "core/card_format.h"
+#include "core/hearstash_note_type.h"
 #include "core/media_encoding.h"
 #include "core/settings.h"
 #include "ui/clipboard_input.h"
@@ -170,6 +171,8 @@ void CardWindow::add(){
         // moment to send
         win.cursor(FL_CURSOR_WAIT);
         Fl::flush();
+        // The first card of the app's own note type adds it to Anki
+        if (anki.note_type == HEARSTASH_NOTE_TYPE) ensure_hearstash_note_type();
         // Stored first, so the note can show them. If the note is then
         // refused, they stay in the media folder unused until Anki's Check
         // Media removes them.

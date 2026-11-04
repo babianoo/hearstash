@@ -60,6 +60,19 @@ std::vector<std::string> anki_model_field_names(const std::string& model){
     return strings(request("modelFieldNames", {{"modelName", model}}));
 }
 
+void anki_create_model(const std::string& name, const std::vector<std::string>& fields, const std::string& css,
+                       const std::vector<AnkiCardTemplate>& templates){
+    json cards = json::array();
+    for (const AnkiCardTemplate& t : templates) cards.push_back({{"Name", t.name}, {"Front", t.front}, {"Back", t.back}});
+    request("createModel", {
+        {"modelName", name},
+        {"inOrderFields", fields},
+        {"css", css},
+        {"isCloze", false},
+        {"cardTemplates", cards},
+    });
+}
+
 void anki_store_media(const std::string& filename, const std::vector<std::uint8_t>& data){
     request("storeMediaFile", {{"filename", filename}, {"data", base64_encode(data)}});
 }

@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "core/anki_fields.h"
+#include "core/hearstash_note_type.h"
 
 static int failures = 0;
 
@@ -46,6 +47,19 @@ int main(){
     CHECK(guess(spaced, CardPart::Sentence).empty());
 
     CHECK(guess({}, CardPart::Word).empty());
+
+    // The default settings fill the Hearstash note type, each part in its
+    // own field, as choosing it in Settings would
+    const AnkiSettings defaults;
+    CHECK(defaults.note_type == HEARSTASH_NOTE_TYPE);
+    const std::vector<std::string> hearstash = hearstash_fields();
+    for (size_t p = 0; p < CARD_PART_COUNT; ++p){
+        const auto part = static_cast<CardPart>(p);
+        CHECK(field_for(defaults, part) == CARD_PART_NAMES[p]);
+        CHECK(guess(hearstash, part) == CARD_PART_NAMES[p]);
+    }
+    // The word first, so it's what Anki checks for duplicates
+    CHECK(hearstash.front() == "Word");
 
     if (failures == 0) std::puts("All anki_fields tests passed");
     return failures;
