@@ -22,7 +22,7 @@ static std::string field(const std::vector<std::pair<std::string, std::string>>&
 static const CardContent CARD{
     .word = "悩む", .reading = "なやむ", .meaning = "1. to be worried\n2. to suffer (from)",
     .sentence = "私だってもうちょっと悩んでたかも", .highlight = "悩んでた",
-    .audio_file = "prototype_1.wav", .picture_file = "prototype_1.jpg",
+    .audio_file = "hearstash_1.wav", .picture_file = "hearstash_1.jpg",
 };
 
 // Like the Immersion Deck: the sentence on the front, everything about
@@ -41,8 +41,8 @@ static void test_immersion_layout(){
           "<li data-dictionary=\"Jisho.org\"><span><ol>"
           "<li style=\"list-style-type: &quot;①&quot;;\">to be worried</li>"
           "<li style=\"list-style-type: &quot;②&quot;;\">to suffer (from)</li>"
-          "</ol></span></li></ol></div><br><br><a href=\"\"></a><br>[sound:prototype_1.wav]");
-    CHECK(field(fields, "Picture") == "<img alt=\"snapshot\" src=\"prototype_1.jpg\">");
+          "</ol></span></li></ol></div><br><br><a href=\"\"></a><br>[sound:hearstash_1.wav]");
+    CHECK(field(fields, "Picture") == "<img alt=\"snapshot\" src=\"hearstash_1.jpg\">");
 }
 
 // A field each, like note types made for mining
@@ -60,7 +60,7 @@ static void test_a_field_each(){
     CHECK(field(fields, "Reading") == "なやむ");
     CHECK(field(fields, "Meaning").starts_with("<div style=\"text-align: left;\" class=\"yomitan-glossary\">"));
     CHECK(field(fields, "Meaning").ends_with("</div><br><br><a href=\"\"></a>"));
-    CHECK(field(fields, "SentenceAudio") == "[sound:prototype_1.wav]");
+    CHECK(field(fields, "SentenceAudio") == "[sound:hearstash_1.wav]");
 }
 
 static void test_details(){

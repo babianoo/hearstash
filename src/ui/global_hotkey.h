@@ -10,7 +10,7 @@
 // key), so the user binds a key there to the command capture_command()
 // gives, e.g. in hyprland.conf:
 //
-//   bind = SUPER, A, exec, /path/to/prototype --capture
+//   bind = SUPER, A, exec, /path/to/hearstash --capture
 //
 // That command passes the press on to the running app through a socket in
 // $XDG_RUNTIME_DIR, which only the user can open.

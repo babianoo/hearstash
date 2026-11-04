@@ -1,6 +1,6 @@
 # Plan: the rolling audio buffer
 
-The main feature of the prototype, and the selling point for the startup
+The main feature of Hearstash, and the selling point for the startup
 class. It grew out of the "rolling audio buffer" experiment in Japanese
 Helper, and takes ideas from Yomitan and from mining cards with mpv +
 mpvacious.
@@ -110,14 +110,14 @@ New `src/ui/global_hotkey.{h,cpp}`.
 - The key combination is a setting. Registering fails if another app has
   it, so that has to be reported, not ignored.
 - Linux (X11: `XGrabKey`; Wayland: the GlobalShortcuts portal) can wait.
-  The prototype is Windows-first.
+  Hearstash is Windows-first.
 
 Done when: pressing it from any app (mpv, a fullscreen browser) opens the
 capture window.
 
 **Linux: done, differently.** Wayland lets no app grab a key, so the
-desktop owns the shortcut: the user binds a key to `prototype --capture`
-(e.g. `bind = SUPER, A, exec, /path/to/prototype --capture` in
+desktop owns the shortcut: the user binds a key to `hearstash --capture`
+(e.g. `bind = SUPER, A, exec, /path/to/hearstash --capture` in
 hyprland.conf), which passes the press to the running app through a
 socket in `$XDG_RUNTIME_DIR`. Settings > Buffer shows the command with
 the right path. This works on X11 desktops too, so no `XGrabKey` was
@@ -132,7 +132,7 @@ dragged), where thread messages are lost. The key is a setting
 Windows 11 uses it, and it has no AltGr in it, which types letters
 like ć in some layouts. Settings > Buffer takes a new one from the keys
 pressed in its box, and pauses the old one meanwhile. A key that's
-taken is reported there. `prototype --capture` works on Windows too,
+taken is reported there. `hearstash --capture` works on Windows too,
 by posting to that window, and a second copy of the app is told the
 first one has the shortcut.
 
@@ -253,7 +253,7 @@ picture.
 which still has to be tried by hand: Anki wasn't open while it was
 built, so only "Anki isn't open" was tested. Picking a note type in
 Settings > Anki guesses the fields from their names (src/core/anki_fields.h,
-tested). Cards are tagged `prototype`, and pictures are at most 480 px
+tested). Cards are tagged `hearstash`, and pictures are at most 480 px
 tall. Each part is formatted like the user's Yomitan cards
 (src/core/card_format.h): the looked-up word highlighted in the
 sentence, `word【reading】`, the meanings as a yomitan-glossary list,

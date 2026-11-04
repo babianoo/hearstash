@@ -5,7 +5,20 @@
 #include <stdexcept>
 
 // The same on every platform
-static constexpr const char* APP_DIR = "Prototype";
+static constexpr const char* APP_DIR = "Hearstash";
+// What the app was called before, so its folders can be moved over
+static constexpr const char* OLD_APP_DIR = "Prototype";
+
+// The app's folder in parent, moving the old one there if only it exists.
+// If the move fails the app just starts afresh.
+static std::filesystem::path app_dir(const std::filesystem::path& parent){
+    const std::filesystem::path dir = parent / APP_DIR;
+    const std::filesystem::path old = parent / OLD_APP_DIR;
+    std::error_code error;
+    if (!std::filesystem::exists(dir, error) && std::filesystem::is_directory(old, error))
+        std::filesystem::rename(old, dir, error);
+    return dir;
+}
 
 #ifdef _WIN32
 // The app's folder in the one var names. Read as wide characters: a
@@ -16,7 +29,7 @@ static std::filesystem::path app_dir_in(const wchar_t* var){
         std::filesystem::path name(var);
         throw std::runtime_error(std::format("{} isn't set", name.string()));
     }
-    return std::filesystem::path(dir) / APP_DIR;
+    return app_dir(dir);
 }
 #else
 // The XDG Base Directory spec: the app's folder in the one var names, or
@@ -24,10 +37,10 @@ static std::filesystem::path app_dir_in(const wchar_t* var){
 // ignore a relative path in var too.
 static std::filesystem::path app_dir_in(const char* var, const char* fallback){
     const char* xdg = std::getenv(var);
-    if (xdg && *xdg == '/') return std::filesystem::path(xdg) / APP_DIR;
+    if (xdg && *xdg == '/') return app_dir(xdg);
     const char* home = std::getenv("HOME");
     if (!home || !*home) throw std::runtime_error(std::format("Neither {} nor HOME is set", var));
-    return std::filesystem::path(home) / fallback / APP_DIR;
+    return app_dir(std::filesystem::path(home) / fallback);
 }
 #endif
 

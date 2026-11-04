@@ -10,7 +10,7 @@
 #include <curl/curl.h>
 
 // Some APIs reject requests without one
-static constexpr const char* USER_AGENT = "prototype/0.1";
+static constexpr const char* USER_AGENT = "hearstash/0.1";
 // Hugging Face takes one, to its download servers. More than this is a
 // loop, or a server that's gone wrong.
 static constexpr long MAX_REDIRECTS = 5;

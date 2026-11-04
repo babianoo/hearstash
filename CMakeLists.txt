@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21...4.3.1)
 # C as well, for whisper.cpp's ggml
-project(prototype C CXX)
+project(hearstash C CXX)
 
 # Require C++23
 set(CMAKE_CXX_STANDARD 23)
@@ -65,7 +65,7 @@ if(UNIX)
 endif()
 
 # Add new source files here, by path from the project root.
-add_executable(prototype
+add_executable(hearstash
     src/main.cpp
     src/core/anki_connect.cpp
     src/core/anki_fields.cpp
@@ -120,15 +120,15 @@ add_executable(prototype
 )
 # Only on our own code: whisper.cpp sets its own warnings, and miniaudio's
 # aren't ours to fix
-target_compile_options(prototype PRIVATE -Wall -Wextra)
+target_compile_options(hearstash PRIVATE -Wall -Wextra)
 
 # Includes are written from src/, e.g. #include "core/anki/anki_connect.h"
-target_include_directories(prototype PRIVATE
+target_include_directories(hearstash PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${FLTK_INCLUDE_DIR}
     ${CAIRO_INCLUDE_DIRS}
 )
-target_link_libraries(prototype PRIVATE
+target_link_libraries(hearstash PRIVATE
     ${FLTK_LIBRARIES}
     CURL::libcurl
     JPEG::JPEG
@@ -138,8 +138,8 @@ target_link_libraries(prototype PRIVATE
     miniaudio
 )
 if(WAYLAND_CLIENT_FOUND)
-    target_link_libraries(prototype PRIVATE PkgConfig::WAYLAND_CLIENT)
-    target_compile_definitions(prototype PRIVATE HAVE_WAYLAND_CLIENT)
+    target_link_libraries(hearstash PRIVATE PkgConfig::WAYLAND_CLIENT)
+    target_compile_definitions(hearstash PRIVATE HAVE_WAYLAND_CLIENT)
 endif()
 
 # --- Tests: ctest --test-dir build ---

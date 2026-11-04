@@ -63,7 +63,7 @@ AudioBuffer::AudioBuffer(int seconds, Backend backend) : length(seconds), impl(s
     ma_context_config config = ma_context_config_init();
     // How it's listed in pavucontrol and the like, so it's clear what's
     // recording
-    config.pulse.pApplicationName = "Prototype";
+    config.pulse.pApplicationName = "Hearstash";
 
     ma_backend null_backend[] = {ma_backend_null};
 #ifdef _WIN32

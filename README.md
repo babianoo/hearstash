@@ -1,4 +1,6 @@
-# Prototype
+# Hearstash
+
+Turn words you hear into flashcards.
 
 A desktop app for learning Japanese from what you watch. It keeps the last
 few seconds of whatever your computer is playing (anime in mpv, a YouTube
@@ -105,12 +107,12 @@ Everything is in **Settings**:
 - **Windows**: `Win+Alt+C` by default. Change it in Settings > Buffer by
   pressing the new keys in its box.
 - **Linux**: Wayland doesn't let apps grab keys, so bind a key in your
-  desktop to `prototype --capture`, which tells the running app to
+  desktop to `hearstash --capture`, which tells the running app to
   capture. Settings > Buffer shows the command with the right path. For
   Hyprland:
 
   ```
-  bind = SUPER, A, exec, /path/to/prototype --capture
+  bind = SUPER, A, exec, /path/to/hearstash --capture
   ```
 
 ### Screenshots on Linux
@@ -130,15 +132,15 @@ supported yet.
 4. Select text in the transcript to look it up.
 5. To make a card, press **Add to Anki**, check the fields, crop the
    screenshot to the video (the last crop is remembered), and press
-   **Add**. Cards are tagged `prototype`.
+   **Add**. Cards are tagged `hearstash`.
 
 ## Where files go
 
 | What | Windows | Linux |
 | --- | --- | --- |
-| `settings.json` | `%APPDATA%\Prototype` | `$XDG_CONFIG_HOME/Prototype` (`~/.config/Prototype`) |
-| `history.json` | `%APPDATA%\Prototype` | `$XDG_STATE_HOME/Prototype` (`~/.local/state/Prototype`) |
-| Whisper models | `%LOCALAPPDATA%\Prototype\models` | `$XDG_DATA_HOME/Prototype/models` (`~/.local/share/Prototype/models`) |
+| `settings.json` | `%APPDATA%\Hearstash` | `$XDG_CONFIG_HOME/Hearstash` (`~/.config/Hearstash`) |
+| `history.json` | `%APPDATA%\Hearstash` | `$XDG_STATE_HOME/Hearstash` (`~/.local/state/Hearstash`) |
+| Whisper models | `%LOCALAPPDATA%\Hearstash\models` | `$XDG_DATA_HOME/Hearstash/models` (`~/.local/share/Hearstash/models`) |
 
 An unreadable `settings.json` is renamed to `settings.json.bad` rather
 than overwritten.

@@ -32,7 +32,7 @@ static constexpr int CROP_H = 330;
 // small and is plenty on a phone
 static constexpr int PICTURE_MAX_H = 480;
 // Every card the app adds gets it, so they can be found in Anki
-static constexpr const char* TAG = "prototype";
+static constexpr const char* TAG = "hearstash";
 
 // A label on the left, at the field's first line
 static void label(int y, const char* text){

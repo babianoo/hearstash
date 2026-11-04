@@ -20,7 +20,7 @@
 #include "core/shortcut.h"
 
 // The hidden window's class, which send_hotkey_press finds it by
-static constexpr const wchar_t* WINDOW_CLASS = L"PrototypeCaptureShortcut";
+static constexpr const wchar_t* WINDOW_CLASS = L"HearstashCaptureShortcut";
 // What RegisterHotKey knows the shortcut by: the window only has the one
 static constexpr int HOTKEY_ID = 1;
 // What send_hotkey_press posts to the window
@@ -76,7 +76,7 @@ GlobalHotkey::GlobalHotkey(std::function<void()> on_press) : on_press(std::move(
     if (!RegisterClassW(&type) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
         throw std::runtime_error(std::format("Couldn't listen for the capture shortcut: error {}", GetLastError()));
 
-    const HWND hwnd = CreateWindowExW(0, WINDOW_CLASS, L"Prototype", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, instance, nullptr);
+    const HWND hwnd = CreateWindowExW(0, WINDOW_CLASS, L"Hearstash", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, instance, nullptr);
     if (!hwnd) throw std::runtime_error(std::format("Couldn't listen for the capture shortcut: error {}", GetLastError()));
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&this->on_press));
     window = hwnd;
@@ -151,13 +151,13 @@ struct Socket {
     int release(){ int out = fd; fd = -1; return out; }
 };
 
-// $XDG_RUNTIME_DIR/prototype.sock. That folder belongs to the user alone
+// $XDG_RUNTIME_DIR/hearstash.sock. That folder belongs to the user alone
 // (mode 0700) and is emptied at logout, so a socket left behind by a
 // crash doesn't outlive the session.
 static sockaddr_un socket_address(){
     const char* dir = std::getenv("XDG_RUNTIME_DIR");
     if (!dir || *dir != '/') throw std::runtime_error("XDG_RUNTIME_DIR isn't set");
-    const std::string path = (std::filesystem::path(dir) / "prototype.sock").string();
+    const std::string path = (std::filesystem::path(dir) / "hearstash.sock").string();
 
     sockaddr_un address{};
     address.sun_family = AF_UNIX;
@@ -239,7 +239,7 @@ void send_hotkey_press(){
 std::string capture_command(){
     std::error_code error;
     const std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", error);
-    const std::string path = error ? "prototype" : exe.string();
+    const std::string path = error ? "hearstash" : exe.string();
     // Hyprland and most desktops run it through sh
     const std::string quoted = path.find(' ') == std::string::npos ? path : std::format("'{}'", path);
     return std::format("{} {}", quoted, CAPTURE_ARG);
