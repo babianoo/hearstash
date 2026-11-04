@@ -76,6 +76,22 @@ cmake -B build -G "MinGW Makefiles" -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buil
 cmake --build build -j
 ```
 
+That build is tuned for your own CPU. To make an `.exe` you can send to
+other people, turn off `GGML_NATIVE` and target the AVX2 instruction set
+instead. Any x64 PC from about 2013 or later supports it. `-s` strips the
+debug symbols:
+
+```bash
+cmake -B build-dist -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-mingw-static -DVCPKG_HOST_TRIPLET=x64-mingw-static -DCMAKE_PREFIX_PATH=C:/deps/fltk "-DCMAKE_EXE_LINKER_FLAGS=-static -s" -DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON
+```
+
+```bash
+cmake --build build-dist -j --target hearstash
+```
+
+`build-dist/hearstash.exe` then runs on its own. It only uses DLLs that
+come with Windows 10 and 11.
+
 ### Tests
 
 The parts that don't need an audio device or a window have plain test

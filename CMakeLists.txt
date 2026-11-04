@@ -118,6 +118,10 @@ add_executable(hearstash
     src/ui/waveform.cpp
     src/ui/wrapped_text.cpp
 )
+# A GUI program on Windows, so starting it (or the capture shortcut running
+# it with --capture) doesn't open a console window. main() stays the entry
+# point with MinGW.
+set_target_properties(hearstash PROPERTIES WIN32_EXECUTABLE ON)
 # Only on our own code: whisper.cpp sets its own warnings, and miniaudio's
 # aren't ours to fix
 target_compile_options(hearstash PRIVATE -Wall -Wextra)
