@@ -6,3 +6,4 @@ build-dist/
 stuff.md
 
 .vscode
+*.7z
