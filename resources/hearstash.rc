@@ -1,0 +1,4 @@
+// Windows only. Builds the app icon into hearstash.exe, so Explorer, the
+// Start menu and a pinned taskbar button show it. src/main.cpp also loads
+// it by this name for the windows' title bars and taskbar buttons.
+APP_ICON ICON "app_icon.ico"

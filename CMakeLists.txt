@@ -122,6 +122,10 @@ add_executable(hearstash
 # it with --capture) doesn't open a console window. main() stays the entry
 # point with MinGW.
 set_target_properties(hearstash PROPERTIES WIN32_EXECUTABLE ON)
+# The app icon, built into the .exe
+if(WIN32)
+    target_sources(hearstash PRIVATE resources/hearstash.rc)
+endif()
 # Only on our own code: whisper.cpp sets its own warnings, and miniaudio's
 # aren't ours to fix
 target_compile_options(hearstash PRIVATE -Wall -Wextra)

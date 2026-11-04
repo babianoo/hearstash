@@ -4,6 +4,13 @@
 
 // FLTK
 #include <FL/Fl.H>
+#include <FL/Fl_Window.H>
+
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 #include "core/config_dir.h"
 #include "core/http.h"
@@ -36,6 +43,18 @@ int main(int argc, char** argv){
     Fl::lock();
 
     init_theme();
+
+#ifdef _WIN32
+    // The icon built into the .exe (resources/hearstash.rc), for every
+    // window's title bar and taskbar button. Loaded at the sizes Windows
+    // draws them at, so neither is scaled from the other.
+    HINSTANCE exe = GetModuleHandleW(nullptr);
+    auto load_icon = [exe](int width_metric, int height_metric){
+        return static_cast<HICON>(LoadImageW(exe, L"APP_ICON", IMAGE_ICON,
+            GetSystemMetrics(width_metric), GetSystemMetrics(height_metric), 0));
+    };
+    Fl_Window::default_icons(load_icon(SM_CXICON, SM_CYICON), load_icon(SM_CXSMICON, SM_CYSMICON));
+#endif
 
     // Declared before main_win, which uses it, so it's destroyed after it.
     // That's once Fl::run() returns, and it then saves a change still
