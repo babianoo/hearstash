@@ -10,7 +10,7 @@
 // the file:
 //
 //   {"anki": {"deck": "Mining"}, "api": {"deepl_key": "..."},
-//    "buffer": {"seconds": 30}, "general": {"scroll_speed": 30},
+//    "buffer": {"seconds": 30}, "general": {"scroll_speed": 50},
 //    "history": {"capacity": 100},
 //    "speech": {"whisper_model": "small"}, "version": 1}
 //
@@ -21,7 +21,7 @@
 struct GeneralSettings {
     // Pixels a scrolling area moves per notch of the mouse wheel. Between
     // MIN_SCROLL_SPEED and MAX_SCROLL_SPEED.
-    int scroll_speed = 30;
+    int scroll_speed = 50;
 
     static constexpr int MIN_SCROLL_SPEED = 4;
     static constexpr int MAX_SCROLL_SPEED = 100;

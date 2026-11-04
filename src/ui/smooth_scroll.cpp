@@ -9,7 +9,7 @@
 
 // Pixels scrolled per wheel notch, from Settings > General. The same for
 // every SmoothScroll; set_wheel_step() changes it.
-static int wheel_step = 30;
+static int wheel_step = 50;
 // Seconds between animation frames (60 fps)
 static constexpr double TICK = 1.0 / 60;
 
