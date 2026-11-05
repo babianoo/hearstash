@@ -136,6 +136,13 @@ taken is reported there. `hearstash --capture` works on Windows too,
 by posting to that window, and a second copy of the app is told the
 first one has the shortcut.
 
+Showing the capture window wasn't enough on Windows: over a borderless
+fullscreen game it opened behind it. `bring_to_front`
+(src/ui/bring_to_front.h) asks for the foreground, and keeps the window
+topmost while the app it opened over is. A game in exclusive fullscreen
+minimizes instead, as it does on Alt+Tab. On Linux the compositor
+already brings a new window to the front.
+
 ### 3. Capture window: waveform, selection, playback
 
 New `src/ui/capture_window.{h,cpp}` and `src/ui/waveform.{h,cpp}`.
@@ -187,7 +194,9 @@ Done when: selecting a word shows its reading and meaning. **This is the
 demo.**
 
 **Done** (no platform code). Spaces and punctuation around the selection
-are dropped first (src/core/lookup_text.h, tested).
+are dropped first (src/core/lookup_text.h, tested). Also added:
+Translate (Ctrl+T) shows the whole line's DeepL translation in the same
+panel, using the DeepL key from Settings > API.
 
 ### 6. Screenshot at the hotkey, and cropping
 
@@ -258,20 +267,29 @@ picture.
 
 **Done** (no platform code), apart from adding a card to a running Anki,
 which still has to be tried by hand: Anki wasn't open while it was
-built, so only "Anki isn't open" was tested. Picking a note type in
-Settings > Anki guesses the fields from their names (src/core/anki_fields.h,
-tested). Cards are tagged `hearstash`, and pictures are at most 480 px
-tall. Each part is formatted like the user's Yomitan cards
-(src/core/card_format.h): the looked-up word highlighted in the
-sentence, `word【reading】`, the meanings as a yomitan-glossary list
-marked up like Jitendex's (senses grouped under part-of-speech badges,
-a gloss a line; the Meaning box writes the parts of speech as a
-`[Noun]` line above their senses), then `[sound:...]` and
-`<img alt="snapshot">`, in whichever fields the settings say. The
-Hearstash note type styles that markup, and one an older version added
-to Anki is updated with the next card unless the user changed it. Jisho
-has no pitch accents, word audio, conjugations or example sentences, so
-those parts stay empty.
+built, so only "Anki isn't open" was tested. Cards are tagged
+`hearstash`, and pictures are at most 480 px tall.
+
+By default cards use Hearstash's own note type
+(src/core/hearstash_note_type.h), so they look right without the user
+making one: the sentence on the front with the word highlighted; the
+word, reading, meanings, audio and picture on the back, in large
+Japanese type. It's added to Anki through AnkiConnect's `createModel`
+with the first card that uses it, and it styles the meanings' markup.
+One an older version added to Anki is updated with the next card unless
+the user changed it. Settings > Anki always offers it, and an empty
+saved note type becomes it.
+
+The user can pick another note type instead, and then the fields are
+guessed from their names (src/core/anki_fields.h, tested). Each part is
+formatted like the user's Yomitan cards (src/core/card_format.h): the
+looked-up word highlighted in the sentence, `word【reading】`, the
+meanings as a yomitan-glossary list marked up like Jitendex's (senses
+grouped under part-of-speech badges, a gloss a line; the Meaning box
+writes the parts of speech as a `[Noun]` line above their senses), then
+`[sound:...]` and `<img alt="snapshot">`, in whichever fields the
+settings say. Jisho has no pitch accents, word audio, conjugations or
+example sentences, so those parts of a Yomitan template stay empty.
 
 ### Windows
 
@@ -281,6 +299,12 @@ Done (November 2026), and tried on Windows 11 with MinGW and vcpkg
 to find, but an FLTK built with its bundled libjpeg puts that one's
 headers first, and the app then uses it. The two declare
 `jpeg_mem_dest`'s size differently, which src/core/image.cpp allows for.
+
+On Windows the app is built as a GUI program, so neither starting it nor
+`hearstash --capture` opens a console window. The README also describes
+a portable static build in `build-dist/`, aimed at AVX2 CPUs instead of
+the build machine's own (`GGML_NATIVE=OFF`), so the `.exe` can be sent
+to other people. It has the same icon as japanese-helper.
 
 Still to try by hand:
 
