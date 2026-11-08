@@ -326,6 +326,92 @@ Things to solve:
   A mismatch can mean whisper misheard.
 - Maybe later: keep a score, or add a card on a miss.
 
+### Possible: read game and VN text (OCR)
+
+For games and visual novels, where the line is on screen, not (only)
+heard. Not built yet. The first step is a comparison on real screenshots.
+
+Why: the capture already has what it needs. The hotkey takes a
+screenshot, and the crop view remembers a rectangle. Reading the text in
+the crop gives the exact sentence, where whisper only guesses. In a
+voiced VN the audio buffer also holds the voice line, so a card gets the
+sentence from the screen, its audio from the buffer and the screenshot,
+with no whisper at all. Same hotkey as for video.
+
+How it works:
+
+- The capture opens with the screenshot and the remembered crop drawn on
+  it, and the text already read into the lookup panel. Enter accepts.
+  Dragging the crop reads it again when the mouse is released. This is
+  the same pattern as the waveform's selection and the card's crop:
+  remembered, shown, easy to change, never required.
+- The crop is remembered **per game**, keyed by the focused window
+  (`hyprctl` on Hyprland, the foreground window on Windows), since every
+  game puts its text box somewhere else.
+- Everything runs on the computer, like whisper. The models come from the
+  model downloader on first use. Screenshots aren't sent to a cloud OCR,
+  which would break the privacy promise.
+
+Two steps:
+
+1. **Detection**: finding each line inside the crop. The crop says where
+   the dialogue box is; what's in it changes every time (one line or
+   three, furigana above kanji, a "next" arrow, the speaker's name).
+2. **Reading**: turning the image of one line, or one block, into text.
+
+Candidates:
+
+- **manga-ocr** reads a whole block, horizontal or vertical, so the crop
+  alone might do, with no detection. But it shrinks every image to a
+  224×224 square: fine for a speech bubble, poor for a wide box of three
+  long lines. Probably the best reader for Japanese.
+- **A row-counting line splitter**: count the text-coloured pixels in each
+  pixel row; lines are peaks, the gaps between them valleys, furigana a
+  small peak above a line. About 50 lines of C++ and no model. It works
+  when the box is plain and readable, and fails on see-through boxes over
+  busy art or on outlined text.
+- **PaddleOCR (PP-OCRv5)**: a detection model and a reading model, with
+  official ONNX exports, in a small "mobile" and a larger "server" size.
+  Its reader takes exactly one line and covers Chinese, English and
+  Japanese. Its own benchmark scores it about 60 on Japanese against 86
+  on Chinese, so manga-ocr probably reads better. Its detection is what's
+  worth having: it copes with loose crops, even the whole window. That
+  matters for full-screen narration pages, choice menus and pop-ups,
+  where the dialogue box crop is wrong.
+- Not Tesseract (poor on Japanese game fonts), and not Windows' own OCR
+  (Windows only, and WinRT from MinGW is painful).
+
+The comparison: about 20 screenshots from real VNs, including full-screen
+narration pages and choice menus, not only dialogue. Each goes through:
+
+1. manga-ocr on the whole crop.
+2. The row-counting splitter, then manga-ocr per line.
+3. Paddle detection, then manga-ocr per line.
+4. Paddle detection and Paddle's own reader.
+
+It answers two questions: which reader is good enough, and how often the
+remembered crop is wrong in practice. If the games keep their text in
+one box, 1 or 2 is enough and Paddle isn't needed. If text moves around
+a lot, Paddle's detection is worth its download.
+
+Things to solve:
+
+- onnxruntime, for manga-ocr and Paddle alike. On Linux it's packaged.
+  Microsoft's Windows DLLs are built with MSVC, so linking them from
+  MinGW through onnxruntime's C API has to be checked first.
+- Detection without OpenCV: Paddle's reference code uses contours and
+  rotated rectangles, but game text is horizontal or vertical, so
+  grouping pixels into plain rectangles is enough. That's small and
+  testable.
+- Reading order: horizontal lines top to bottom, vertical ones right to
+  left.
+- Furigana: drop lines much shorter than their neighbours, or better,
+  keep them as the reading.
+- Size: about 80 MB for Paddle's server reader, plus its detector, plus
+  a few hundred MB for manga-ocr.
+- Speed: not measured. It should be far below whisper's, but it needs a
+  benchmark like whisper got.
+
 ## Settings to add
 
 To `src/core/settings.h`, as new categories in the settings window:
