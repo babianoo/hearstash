@@ -1,6 +1,7 @@
 japanese-helper/
 build/
 build-dist/
+testing/
 
 *.txt
 stuff.md
