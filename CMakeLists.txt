@@ -40,6 +40,28 @@ if(NOT WIN32)
     endif()
 endif()
 
+# onnxruntime, to read text in screenshots (OCR) with PaddleOCR's models.
+# Arch: onnxruntime-cpu. Elsewhere, e.g. Windows, Microsoft's prebuilt
+# package from https://github.com/microsoft/onnxruntime/releases: pass its
+# folder as -DONNXRUNTIME_ROOT=... Without it the app builds, but can't
+# read text from the screen.
+find_package(onnxruntime CONFIG QUIET)
+if(NOT onnxruntime_FOUND)
+    set(ONNXRUNTIME_ROOT "" CACHE PATH "Folder of Microsoft's prebuilt onnxruntime package")
+    find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
+        HINTS ${ONNXRUNTIME_ROOT}/include PATH_SUFFIXES onnxruntime)
+    find_library(ONNXRUNTIME_LIBRARY onnxruntime HINTS ${ONNXRUNTIME_ROOT}/lib)
+    if(ONNXRUNTIME_INCLUDE_DIR AND ONNXRUNTIME_LIBRARY)
+        add_library(onnxruntime::onnxruntime UNKNOWN IMPORTED)
+        set_target_properties(onnxruntime::onnxruntime PROPERTIES
+            IMPORTED_LOCATION ${ONNXRUNTIME_LIBRARY}
+            INTERFACE_INCLUDE_DIRECTORIES ${ONNXRUNTIME_INCLUDE_DIR})
+        set(onnxruntime_FOUND TRUE)
+    else()
+        message(STATUS "onnxruntime not found: the app won't read text from the screen")
+    endif()
+endif()
+
 # --- Dependencies built with the app (git submodules in external/) ---
 # Fetch them with: git submodule update --init
 # whisper.cpp, for speech to text. Linked statically, so there are no
@@ -94,6 +116,10 @@ add_executable(hearstash
     src/core/local_time.cpp
     src/core/lookup_text.cpp
     src/core/media_encoding.cpp
+    src/core/ocr_models.cpp
+    src/core/ocr_text.cpp
+    src/core/text_reader.cpp
+    src/core/verified_download.cpp
     src/core/config_dir.cpp
     src/core/recorder.cpp
     src/core/resample.cpp
@@ -119,8 +145,10 @@ add_executable(hearstash
     src/ui/history_table.cpp
     src/ui/history_window.cpp
     src/ui/jisho_format.cpp
+    src/ui/lookup_panels.cpp
     src/ui/main_window.cpp
     src/ui/model_downloader.cpp
+    src/ui/screen_window.cpp
     src/ui/search_bar.cpp
     src/ui/settings_store.cpp
     src/ui/settings_window.cpp
@@ -168,6 +196,24 @@ endif()
 if(LIBSYSTEMD_FOUND)
     target_link_libraries(hearstash PRIVATE PkgConfig::LIBSYSTEMD)
     target_compile_definitions(hearstash PRIVATE HAVE_SD_BUS)
+endif()
+if(onnxruntime_FOUND)
+    target_link_libraries(hearstash PRIVATE onnxruntime::onnxruntime)
+    target_compile_definitions(hearstash PRIVATE HAVE_ONNXRUNTIME)
+
+    # Reads screenshots (PNG) with the models and prints their text, to
+    # check the OCR on saved screenshots: tools/read_text.cpp says how
+    add_executable(read_text tools/read_text.cpp src/core/text_reader.cpp src/core/ocr_text.cpp
+                   src/core/image.cpp src/core/screenshot.cpp)
+    target_compile_options(read_text PRIVATE -Wall -Wextra)
+    target_include_directories(read_text PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(read_text PRIVATE HAVE_ONNXRUNTIME)
+    target_link_libraries(read_text PRIVATE onnxruntime::onnxruntime JPEG::JPEG nlohmann_json::nlohmann_json)
+    if(WIN32)
+        target_link_libraries(read_text PRIVATE gdi32 user32)
+    else()
+        target_link_libraries(read_text PRIVATE PNG::PNG)
+    endif()
 endif()
 
 # --- Tests: ctest --test-dir build ---
@@ -217,6 +263,11 @@ add_executable(card_format_test tests/card_format_test.cpp src/core/card_format.
 target_compile_options(card_format_test PRIVATE -Wall -Wextra)
 target_include_directories(card_format_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME card_format COMMAND card_format_test)
+
+add_executable(ocr_text_test tests/ocr_text_test.cpp src/core/ocr_text.cpp)
+target_compile_options(ocr_text_test PRIVATE -Wall -Wextra)
+target_include_directories(ocr_text_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME ocr_text COMMAND ocr_text_test)
 
 add_executable(shortcut_test tests/shortcut_test.cpp src/core/shortcut.cpp)
 target_compile_options(shortcut_test PRIVATE -Wall -Wextra)

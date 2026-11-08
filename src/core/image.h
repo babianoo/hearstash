@@ -31,6 +31,18 @@ Image crop(const Image& image, Rect rect);
 // image comes back as it is.
 Image shrink_to_height(const Image& image, int max_height);
 
+// image scaled to width x height (both at least 1), each new pixel mixed
+// from the 4 nearest old ones (bilinear, sampled at pixel centers, like
+// OpenCV's INTER_LINEAR, which the text reading models were trained
+// with). Unlike shrink_to_height, it can make an image bigger, and its
+// shape can change.
+Image resize(const Image& image, int width, int height);
+
+// image turned a quarter turn to the left (counterclockwise): its top row
+// becomes the left column, read from the bottom up. A column of vertical
+// text then reads left to right.
+Image rotate_left(const Image& image);
+
 // image as a JPEG file's bytes, at quality from 1 to 100. Throws
 // std::runtime_error if image is empty, or libjpeg fails.
 std::vector<std::uint8_t> encode_jpeg(const Image& image, int quality);

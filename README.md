@@ -18,6 +18,11 @@ video, a stream). When you miss a line, press a shortcut and you can:
 
 The fast path is **shortcut → Enter → read**. Everything else is optional.
 
+For games and visual novels, a second shortcut reads the text on the
+screen instead (OCR, with [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)'s
+models, also on your own machine), into the same kind of window: look
+words up, translate, and add cards the same way.
+
 The main window is also a lookup tool: type or paste text, or record it
 from the microphone (Record Input in the **+** menu), and search Jisho, DeepL or MyMemory. Successful
 searches are kept in a history window.
@@ -43,6 +48,10 @@ Installed on the system:
   Wayland
 - Optional, on Linux: libsystemd (its sd-bus), for screenshots on KDE,
   GNOME and X11. Without it, screenshots only work with grim
+- Optional: [onnxruntime](https://onnxruntime.ai/), to read text on the
+  screen (Arch: `onnxruntime-cpu`; elsewhere Microsoft's prebuilt package,
+  passed to CMake as `-DONNXRUNTIME_ROOT=<its folder>`). Without it, the
+  screen capture says it can't read
 
 Built with the app, as git submodules in `external/`:
 
@@ -126,18 +135,26 @@ Everything is in **Settings**:
   `DEEPL_API_KEY` environment variable, which is never saved.
 - **History**: how many searches to keep, and clearing them.
 
-### The capture shortcut
+### The capture shortcuts
 
-- **Windows**: `Win+Alt+C` by default. Change it in Settings > Buffer by
-  pressing the new keys in its box.
-- **Linux**: Wayland doesn't let apps grab keys, so bind a key in your
-  desktop to `hearstash --capture`, which tells the running app to
-  capture. Settings > Buffer shows the command with the right path. For
-  Hyprland:
+There are two: the capture of what the computer played, and the screen
+capture, which reads the text on the screen.
+
+- **Windows**: `Win+Alt+C` and `Win+Alt+X` by default. Change them in
+  Settings > Buffer and Settings > Screen Text by pressing the new keys in
+  their box.
+- **Linux**: Wayland doesn't let apps grab keys, so bind keys in your
+  desktop to `hearstash --capture` and `hearstash --read-screen`, which
+  tell the running app to capture. Settings > Buffer and Settings > Screen
+  Text show the commands with the right path. For Hyprland:
 
   ```
   bind = SUPER, A, exec, /path/to/hearstash --capture
+  bind = SUPER, S, exec, /path/to/hearstash --read-screen
   ```
+
+  On KDE, add each command in System Settings > Shortcuts > Add New >
+  Command or Script.
 
 ### Screenshots on Linux
 
@@ -148,7 +165,8 @@ GNOME, X11) they go through the desktop's screenshot portal
 
 - may ask once whether Hearstash can take screenshots,
 - takes all your monitors, not just the one with the video, so crop to
-  it as usual,
+  it as usual (on KDE it's cut down to the monitor with the focus, with
+  `kscreen-doctor`),
 - is slower: about 2 s on KDE before the capture window opens.
 
 ## Using a capture
@@ -164,6 +182,17 @@ GNOME, X11) they go through the desktop's screenshot portal
    screenshot to the video (the last crop is remembered), and press
    **Add**. Cards are tagged `hearstash`.
 
+## Using a screen capture
+
+1. Press the screen capture shortcut in the game. The window opens with a
+   screenshot, and the text on it is read. The first time, the models
+   that read it are downloaded (about 30 MB).
+2. Drag around the text box in the screenshot to read only that. It's
+   kept for the game, so the next screen capture there reads only it too.
+   **Whole screen** goes back to all of it.
+3. Select text to look it up, and **Add to Anki** as with a capture. The
+   card has no audio.
+
 ![The capture window: the selected line's waveform, its transcript with 映画 selected, and Jisho's entries for it](docs/lookup.png)
 
 ![Add to Anki: the word, reading, meaning and sentence filled in, with the screenshot to crop](docs/card.png)
@@ -175,6 +204,7 @@ GNOME, X11) they go through the desktop's screenshot portal
 | `settings.json` | `%APPDATA%\Hearstash` | `$XDG_CONFIG_HOME/Hearstash` (`~/.config/Hearstash`) |
 | `history.json` | `%APPDATA%\Hearstash` | `$XDG_STATE_HOME/Hearstash` (`~/.local/state/Hearstash`) |
 | Whisper models | `%LOCALAPPDATA%\Hearstash\models` | `$XDG_DATA_HOME/Hearstash/models` (`~/.local/share/Hearstash/models`) |
+| Screen reading models | the same, in `ocr` | the same, in `ocr` |
 
 An unreadable `settings.json` is renamed to `settings.json.bad` rather
 than overwritten.
@@ -185,7 +215,7 @@ The app listens to everything your computer plays, so:
 
 - The buffer stays in memory and is never written to disk, except a clip
   you add to a card.
-- Transcription runs locally. Nothing is sent anywhere except what you
+- Transcription and reading the screen run locally. Nothing is sent anywhere except what you
   choose to look up (to Jisho, DeepL or MyMemory) and cards you add to
   your own Anki.
 - Turning the buffer off in Settings > Buffer stops it recording.

@@ -12,7 +12,7 @@
 #include "core/screenshot.h"
 #include "core/settings.h"
 #include "ui/capture_window.h"
-#include "ui/global_hotkey.h"
+#include "ui/screen_window.h"
 #include "ui/settings_store.h"
 
 // Seconds between checks for a new default output. Enumerating the
@@ -24,18 +24,21 @@ Capturer::Capturer(SettingsStore& settings, SharedTranscriber& transcriber)
     apply_settings();
     settings_listener = settings.add_listener([this]{
         apply_settings();
-        apply_shortcut();
+        apply_shortcuts();
     });
     Fl::add_timeout(FOLLOW_TICK, on_follow_tick, this);
 
     try {
-        hotkey = std::make_unique<GlobalHotkey>([this]{ capture(); });
+        hotkey = std::make_unique<GlobalHotkey>([this](HotkeyAction action){
+            if (action == HotkeyAction::Capture) capture();
+            else read_screen();
+        });
     } catch (const std::exception& e){
-        // Shown on the Buffer settings page too
-        std::cerr << std::format("No capture shortcut: {}\n", e.what());
-        hotkey_error_ = e.what();
+        // Shown on the Buffer and Screen Text settings pages too
+        std::cerr << std::format("No capture shortcuts: {}\n", e.what());
+        hotkey_errors.fill(e.what());
     }
-    apply_shortcut();
+    apply_shortcuts();
 }
 
 Capturer::~Capturer(){
@@ -72,21 +75,26 @@ void Capturer::apply_settings(){
     }
 }
 
-void Capturer::apply_shortcut(){
+void Capturer::apply_shortcuts(){
     if (!hotkey || hotkey_paused) return;
-    // Every change to any setting comes here, and a shortcut that failed
-    // is only tried again once it's changed
-    const std::string& wanted = settings.get().buffer.shortcut;
-    if (wanted == applied_shortcut) return;
-    applied_shortcut = wanted;
+    for (HotkeyAction action : {HotkeyAction::Capture, HotkeyAction::ReadScreen}){
+        // Every change to any setting comes here, and a shortcut that
+        // failed is only tried again once it's changed
+        const std::string& wanted = action == HotkeyAction::Capture ? settings.get().buffer.shortcut
+                                                                    : settings.get().screen_text.shortcut;
+        std::string& applied = applied_shortcuts[index(action)];
+        if (wanted == applied) continue;
+        applied = wanted;
 
-    try {
-        hotkey->set_shortcut(wanted);
-        hotkey_error_.clear();
-    } catch (const std::exception& e){
-        // Shown on the Buffer settings page, next to the shortcut
-        std::cerr << std::format("No capture shortcut: {}\n", e.what());
-        hotkey_error_ = e.what();
+        std::string& error = hotkey_errors[index(action)];
+        try {
+            hotkey->set_shortcut(action, wanted);
+            error.clear();
+        } catch (const std::exception& e){
+            // Shown on the settings page, next to the shortcut
+            std::cerr << std::format("No shortcut {}: {}\n", wanted, e.what());
+            error = e.what();
+        }
     }
 }
 
@@ -94,11 +102,13 @@ void Capturer::pause_hotkey(bool paused){
     if (!hotkey || paused == hotkey_paused) return;
     hotkey_paused = paused;
     if (paused){
-        // Taking it away can't fail
-        hotkey->set_shortcut("");
-        applied_shortcut.clear();
+        // Taking them away can't fail
+        for (HotkeyAction action : {HotkeyAction::Capture, HotkeyAction::ReadScreen}){
+            hotkey->set_shortcut(action, "");
+            applied_shortcuts[index(action)].clear();
+        }
     } else {
-        apply_shortcut();
+        apply_shortcuts();
     }
 }
 
@@ -143,4 +153,21 @@ void Capturer::capture(){
     if (!capture_win) capture_win = std::make_unique<CaptureWindow>(settings, transcriber);
     capture_win->open(std::move(audio), AudioBuffer::SAMPLE_RATE, settings.get().buffer.selection_seconds,
                       std::move(screenshot), std::move(screenshot_error));
+}
+
+void Capturer::read_screen(){
+    // Which game it is, for the part of the screen kept for it. Before the
+    // screenshot, which may show the portal's dialog.
+    std::string app = focused_app();
+    Image screenshot;
+    try {
+        screenshot = take_screenshot();
+    } catch (const std::exception& e){
+        // Modal: waits for OK before returning
+        fl_alert("Couldn't read the screen:\n\n%s", e.what());
+        return;
+    }
+
+    if (!screen_win) screen_win = std::make_unique<ScreenWindow>(settings);
+    screen_win->open(std::move(screenshot), std::move(app));
 }

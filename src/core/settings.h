@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <map>
 #include <string>
 
 #include "core/shortcut.h"
@@ -12,6 +13,7 @@
 //   {"anki": {"deck": "Mining"}, "api": {"deepl_key": "..."},
 //    "buffer": {"seconds": 30}, "general": {"scroll_speed": 50},
 //    "history": {"capacity": 100},
+//    "screen_text": {"areas": {"fate.exe": {"x": 0.1, ...}}},
 //    "speech": {"whisper_model": "small"}, "version": 1}
 //
 // The field names are the JSON keys, so renaming one changes the file
@@ -99,12 +101,33 @@ struct AnkiSettings {
     static constexpr int MAX_QUALITY = 100;
 };
 
+// Part of a screenshot, as fractions of its width and height, so it still
+// fits after the resolution changes. w == 0 when there's none.
+struct ScreenArea {
+    double x = 0, y = 0, w = 0, h = 0;
+
+    bool empty() const { return w <= 0 || h <= 0; }
+    bool operator==(const ScreenArea&) const = default;
+};
+
+// The Screen Text category: reading text on the screen (OCR)
+struct ScreenTextSettings {
+    // The screen capture shortcut on Windows, as parse_shortcut reads it.
+    // Unused on Linux, where the desktop owns the key.
+    std::string shortcut = DEFAULT_SCREEN_SHORTCUT;
+    // The part of the screen to read in each game, by the program that had
+    // the focus (focused_app()), "" for any when the desktop doesn't say.
+    // Chosen in the screen window; a game with none is read whole.
+    std::map<std::string, ScreenArea> areas;
+};
+
 struct Settings {
     AnkiSettings anki;
     ApiSettings api;
     BufferSettings buffer;
     GeneralSettings general;
     HistorySettings history;
+    ScreenTextSettings screen_text;
     SpeechSettings speech;
 };
 

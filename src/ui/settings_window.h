@@ -8,6 +8,7 @@
 #include <FL/Fl_Double_Window.H>
 
 #include "core/anki_fields.h"
+#include "ui/global_hotkey.h"
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in settings_window.cpp instead.
@@ -120,6 +121,9 @@ private:
     ShortcutInput* shortcut_input = nullptr;
     // Why the capture shortcut can't be received, if it can't
     Fl_Box* hotkey_status = nullptr;
+    // The same for the screen capture, on the Screen Text page
+    ShortcutInput* screen_shortcut_input = nullptr;
+    Fl_Box* screen_hotkey_status = nullptr;
     // On the Anki page. The names are what each item of the dropdowns
     // saves; a field's dropdown starts with "(none)", which saves "".
     Fl_Choice* deck_choice = nullptr;
@@ -149,6 +153,7 @@ private:
     static void on_buffer_enabled(Fl_Widget* w, void* data);
     static void on_buffer_seconds(Fl_Widget* w, void* data);
     static void on_shortcut(Fl_Widget* w, void* data);
+    static void on_screen_shortcut(Fl_Widget* w, void* data);
     static void on_deck_chosen(Fl_Widget* w, void* data);
     static void on_note_type_chosen(Fl_Widget* w, void* data);
     static void on_field_chosen(Fl_Widget* w, void* data);
@@ -162,6 +167,11 @@ private:
     void add_api_settings(int x, int w);
     void add_speech_settings(int x, int w);
     void add_buffer_settings(int x, int w);
+    void add_screen_text_settings(int x, int w);
+    // A shortcut's box (Windows) or command (Linux) under its label, from
+    // y, which is moved down past them, and a line for why it can't be
+    // received
+    void add_hotkey_settings(int left, int right, int& y, HotkeyAction action);
     void add_anki_settings(int x, int w);
     void select(size_t i);
     // Shows how many searches there are, which changes with every search

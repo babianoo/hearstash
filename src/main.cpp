@@ -27,9 +27,9 @@
 int main(int argc, char** argv){
     // Run by the key the user bound to it: passes the press on to the app
     // that's running, and quits
-    if (argc == 2 && std::string_view(argv[1]) == CAPTURE_ARG){
+    if (argc == 2 && (std::string_view(argv[1]) == CAPTURE_ARG || std::string_view(argv[1]) == READ_SCREEN_ARG)){
         try {
-            send_hotkey_press();
+            send_hotkey_press(std::string_view(argv[1]) == CAPTURE_ARG ? HotkeyAction::Capture : HotkeyAction::ReadScreen);
             return 0;
         } catch (const std::exception& e){
             std::cerr << "Couldn't capture: " << e.what() << '\n';

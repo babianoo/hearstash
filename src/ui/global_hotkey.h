@@ -3,27 +3,32 @@
 #include <functional>
 #include <string>
 
-// The shortcut that takes a capture, pressed in any app: mpv, a
-// fullscreen browser, a game.
+// What a global shortcut does: a capture of what the computer played, or
+// one of the text on the screen
+enum class HotkeyAction { Capture, ReadScreen };
+
+// The shortcuts that take a capture, pressed in any app: mpv, a
+// fullscreen browser, a game. One for each HotkeyAction.
 //
 // On Linux the desktop owns global shortcuts (Wayland lets no app grab a
-// key), so the user binds a key there to the command capture_command()
-// gives, e.g. in hyprland.conf:
+// key), so the user binds a key there to the command hotkey_command()
+// gives for each, e.g. in hyprland.conf:
 //
 //   bind = SUPER, A, exec, /path/to/hearstash --capture
+//   bind = SUPER, S, exec, /path/to/hearstash --read-screen
 //
 // That command passes the press on to the running app through a socket in
 // $XDG_RUNTIME_DIR, which only the user can open.
 //
-// On Windows the app registers the key itself, with RegisterHotKey, on a
-// hidden window of its own. The key is a setting (set_shortcut). The
-// command works there too, passing the press on to that window.
+// On Windows the app registers the keys itself, with RegisterHotKey, on a
+// hidden window of its own. The keys are settings (set_shortcut). The
+// commands work there too, passing the press on to that window.
 class GlobalHotkey {
 public:
-    // on_press is called on the UI thread for each press. Throws
-    // std::runtime_error if presses can't be received, e.g. when another
-    // copy of the app is already running and receiving them.
-    explicit GlobalHotkey(std::function<void()> on_press);
+    // on_press is called on the UI thread for each press, with what it's
+    // for. Throws std::runtime_error if presses can't be received, e.g.
+    // when another copy of the app is already running and receiving them.
+    explicit GlobalHotkey(std::function<void(HotkeyAction)> on_press);
     // Stops receiving presses
     ~GlobalHotkey();
 
@@ -32,19 +37,20 @@ public:
     GlobalHotkey& operator=(const GlobalHotkey&) = delete;
 
     // On Windows: makes shortcut, as parse_shortcut reads it, the key that
-    // presses, in place of the one before. Empty for none. Throws
-    // std::runtime_error if it can't, e.g. another app has it already; then
-    // there's none. Does nothing on Linux, where the desktop owns the key.
-    void set_shortcut(const std::string& shortcut);
+    // presses for action, in place of the one before. Empty for none.
+    // Throws std::runtime_error if it can't, e.g. another app has it
+    // already; then there's none. Does nothing on Linux, where the desktop
+    // owns the keys.
+    void set_shortcut(HotkeyAction action, const std::string& shortcut);
 
 private:
-    std::function<void()> on_press;
+    std::function<void(HotkeyAction)> on_press;
 #ifdef _WIN32
     // The hidden window presses arrive at, an HWND, so this header doesn't
     // need windows.h
     void* window = nullptr;
-    // Whether a shortcut is registered on it
-    bool registered = false;
+    // Whether a shortcut is registered on it for each action
+    bool registered[2] = {false, false};
 #else
     // The socket presses arrive on; -1 if none
     int listener = -1;
@@ -56,14 +62,17 @@ private:
 #endif
 };
 
-// The argument that makes the app send a press and quit, instead of
+// The arguments that make the app send a press and quit, instead of
 // starting
 inline constexpr const char* CAPTURE_ARG = "--capture";
+inline constexpr const char* READ_SCREEN_ARG = "--read-screen";
 
-// Sends a press to the running app, for main() when it's started with
-// CAPTURE_ARG. Throws std::runtime_error if no copy of the app is running.
-void send_hotkey_press();
+// Sends a press for action to the running app, for main() when it's
+// started with CAPTURE_ARG or READ_SCREEN_ARG. Throws std::runtime_error
+// if no copy of the app is running.
+void send_hotkey_press(HotkeyAction action);
 
-// The command to bind to a key, with this executable's full path, quoted
-// if it has spaces. Empty on Windows, where the key is set in the app.
-std::string capture_command();
+// The command to bind to a key for action, with this executable's full
+// path, quoted if it has spaces. Empty on Windows, where the keys are set
+// in the app.
+std::string hotkey_command(HotkeyAction action);

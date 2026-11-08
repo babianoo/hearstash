@@ -22,6 +22,8 @@ struct Shortcut {
 // The one a new install starts with. On Windows 11 nothing else uses it,
 // and it has no AltGr in it, which types letters like ć in some layouts.
 inline constexpr const char* DEFAULT_SHORTCUT = "Win+Alt+C";
+// The same for the screen capture, next to it
+inline constexpr const char* DEFAULT_SCREEN_SHORTCUT = "Win+Alt+X";
 
 // Why shortcut can't be one, e.g. "Add Ctrl, Alt or Win to it". Empty if
 // it can. A shortcut takes its keys from every app, so a key that types

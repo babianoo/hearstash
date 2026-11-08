@@ -32,7 +32,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralSettings, scroll_speed)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model, input_device)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, anki, api, buffer, general, history, speech)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ScreenArea, x, y, w, h)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ScreenTextSettings, shortcut, areas)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Settings, anki, api, buffer, general, history, screen_text, speech)
 
 Settings load_settings(const fs::path& file){
     std::ifstream in(file);
@@ -77,6 +79,9 @@ void sanitize(Settings& settings){
     // can't be read is replaced, so there's always one.
     const std::optional<Shortcut> shortcut = parse_shortcut(buffer.shortcut);
     buffer.shortcut = shortcut ? format_shortcut(*shortcut) : DEFAULT_SHORTCUT;
+    std::string& screen_shortcut = settings.screen_text.shortcut;
+    const std::optional<Shortcut> parsed_screen = parse_shortcut(screen_shortcut);
+    screen_shortcut = parsed_screen ? format_shortcut(*parsed_screen) : DEFAULT_SCREEN_SHORTCUT;
 
     AnkiSettings& anki = settings.anki;
     // E.g. saved by a version that had no note type of its own, before one
@@ -97,6 +102,12 @@ void sanitize(Settings& settings){
     const bool fits = anki.crop_x >= 0 && anki.crop_y >= 0 && anki.crop_w > 0 && anki.crop_h > 0
                    && anki.crop_x + anki.crop_w <= 1.0001 && anki.crop_y + anki.crop_h <= 1.0001;
     if (!fits) anki.crop_x = anki.crop_y = anki.crop_w = anki.crop_h = 0;
+
+    // An area that doesn't fit in a screenshot is no area
+    std::erase_if(settings.screen_text.areas, [](const auto& entry){
+        const ScreenArea& a = entry.second;
+        return a.empty() || a.x < 0 || a.y < 0 || a.x + a.w > 1.0001 || a.y + a.h > 1.0001;
+    });
 
     // An id the app doesn't offer, e.g. one a version with other models
     // saved, or a typo in the file. Clearing it means nothing has to check

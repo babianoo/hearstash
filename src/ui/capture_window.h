@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -10,21 +9,18 @@
 #include <FL/Fl_Double_Window.H>
 
 #include "core/image.h"
-#include "core/jisho.h"
 
 // Only pointers and references to these are stored here, so the full
 // headers are included in capture_window.cpp instead.
 class CardWindow;
 class ClipPlayer;
+class LookupPanels;
 class SettingsStore;
 class SharedTranscriber;
-class SmoothScroll;
 class Waveform;
-class WrappedText;
 class Fl_Box;
 class Fl_Button;
 class Fl_Widget;
-struct TextSpan;
 
 // The window a capture opens in: the waveform of the last seconds of
 // what the computer played, with the end already selected. The selection
@@ -41,6 +37,8 @@ struct TextSpan;
 //
 // Closing it (or Escape) hides it, stops playing and transcribing, and
 // forgets the audio and the screenshot.
+//
+// ScreenWindow is its twin for text on the screen.
 class CaptureWindow {
 public:
     // settings and transcriber have to outlive the window
@@ -70,21 +68,6 @@ private:
         unsigned id;
         std::jthread thread;
     };
-    // What a lookup thread hands back to the UI thread
-    struct LookupResult {
-        CaptureWindow* win;
-        unsigned id;
-        std::string keyword;
-        std::vector<JishoEntry> entries{};
-        std::string error{};    // Non-empty if it failed
-    };
-    // What a translation thread hands back to the UI thread
-    struct TranslationResult {
-        CaptureWindow* win;
-        unsigned id;
-        std::string translation{};
-        std::string error{};    // Non-empty if it failed
-    };
     // What a job hands back to the UI thread
     struct JobResult {
         CaptureWindow* win;
@@ -109,14 +92,8 @@ private:
     Fl_Button* transcribe_btn = nullptr;
     Fl_Button* anki_btn = nullptr;
     Fl_Button* translate_btn = nullptr;
-    // The transcript, or what to do to get one. transcript_text is
-    // transcript's only child.
-    SmoothScroll* transcript = nullptr;
-    WrappedText* transcript_text = nullptr;
-    // What was selected in the transcript, looked up. dictionary_text is
-    // dictionary's only child.
-    SmoothScroll* dictionary = nullptr;
-    WrappedText* dictionary_text = nullptr;
+    // The transcript and its lookups. Its widgets are win's.
+    std::unique_ptr<LookupPanels> panels;
 
     // What waveform shows; it only borrows it
     std::vector<float> audio;
@@ -126,11 +103,6 @@ private:
     std::unique_ptr<ClipPlayer> player;
     Image screenshot;
     std::string screenshot_error;
-    // The transcript shown, and the first entry of the lookup shown, if
-    // any, for a card
-    std::string transcript_shown;
-    std::optional<JishoEntry> entry_shown;
-    std::string keyword_shown;
     // Created the first time a card is added. Not a plain member: a window
     // created in this one's constructor would end up inside it.
     std::unique_ptr<CardWindow> card_win;
@@ -140,9 +112,6 @@ private:
     unsigned next_job_id = 1;
     // The job whose transcript is awaited, or 0 if none
     unsigned transcribing = 0;
-    // Bumped on every lookup and translation, which share the panel. Only
-    // the latest one's result is shown.
-    unsigned latest_lookup = 0;
 
     // Static because FLTK callbacks are plain functions; the CaptureWindow
     // comes in through data.
@@ -157,11 +126,6 @@ private:
     static void on_play_tick(void* data);
     // Runs on the UI thread, called by Fl::awake() from a job
     static void on_job_done(void* data);
-    // Runs on the UI thread, called by Fl::awake() from a lookup thread
-    static void on_lookup_done(void* data);
-    // Runs on the UI thread, called by Fl::awake() from a translation
-    // thread
-    static void on_translation_done(void* data);
 
     void play();
     void stop_playing();
@@ -177,13 +141,4 @@ private:
     void refresh_transcribe_button();
     // Opens the card window with what's shown
     void add_to_anki();
-    // Replaces what the transcript area shows
-    void show_transcript(const std::vector<TextSpan>& spans);
-    void show_note(const std::string& note);
-    // Looks up what's selected in the transcript, if it's worth it
-    void look_up_selection();
-    // Translates the transcript with DeepL, into the lookup panel
-    void translate();
-    // Replaces what the lookup panel shows
-    void show_lookup(const std::vector<TextSpan>& spans);
 };

@@ -21,9 +21,13 @@
 
 // The hidden window's class, which send_hotkey_press finds it by
 static constexpr const wchar_t* WINDOW_CLASS = L"HearstashCaptureShortcut";
-// What RegisterHotKey knows the shortcut by: the window only has the one
-static constexpr int HOTKEY_ID = 1;
-// What send_hotkey_press posts to the window
+// What RegisterHotKey knows each shortcut by: 1 for Capture, 2 for
+// ReadScreen
+static int hotkey_id(HotkeyAction action){
+    return action == HotkeyAction::Capture ? 1 : 2;
+}
+// What send_hotkey_press posts to the window, with the action's id as
+// wparam
 static constexpr UINT PRESS = WM_APP + 1;
 
 // Windows' virtual-key code for key, a name shortcut_key_name gives
@@ -48,11 +52,12 @@ static UINT virtual_key(const std::string& key){
 // The hidden window's messages, which FLTK's event loop hands it, on the
 // UI thread. Its user data is the GlobalHotkey's on_press.
 static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam){
-    if ((message == WM_HOTKEY && wparam == HOTKEY_ID) || message == PRESS){
-        auto* on_press = reinterpret_cast<std::function<void()>*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if ((message == WM_HOTKEY || message == PRESS) && (wparam == 1 || wparam == 2)){
+        const HotkeyAction action = wparam == 1 ? HotkeyAction::Capture : HotkeyAction::ReadScreen;
+        auto* on_press = reinterpret_cast<std::function<void(HotkeyAction)>*>(GetWindowLongPtrW(window, GWLP_USERDATA));
         // An exception can't unwind through the Windows code that called this
         try {
-            if (on_press) (*on_press)();
+            if (on_press) (*on_press)(action);
         } catch (const std::exception& e){
             std::cerr << std::format("Couldn't capture: {}\n", e.what());
         }
@@ -61,7 +66,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
     return DefWindowProcW(window, message, wparam, lparam);
 }
 
-GlobalHotkey::GlobalHotkey(std::function<void()> on_press) : on_press(std::move(on_press)){
+GlobalHotkey::GlobalHotkey(std::function<void(HotkeyAction)> on_press) : on_press(std::move(on_press)){
     // A message-only window: never shown, and only found by asking for
     // those. Its messages still come through any message loop, including
     // the one Windows runs while a window is dragged.
@@ -84,15 +89,18 @@ GlobalHotkey::GlobalHotkey(std::function<void()> on_press) : on_press(std::move(
 
 GlobalHotkey::~GlobalHotkey(){
     const HWND hwnd = static_cast<HWND>(window);
-    if (registered) UnregisterHotKey(hwnd, HOTKEY_ID);
+    for (HotkeyAction action : {HotkeyAction::Capture, HotkeyAction::ReadScreen})
+        if (registered[hotkey_id(action) - 1]) UnregisterHotKey(hwnd, hotkey_id(action));
     DestroyWindow(hwnd);
 }
 
-void GlobalHotkey::set_shortcut(const std::string& text){
+void GlobalHotkey::set_shortcut(HotkeyAction action, const std::string& text){
     const HWND hwnd = static_cast<HWND>(window);
-    if (registered){
-        UnregisterHotKey(hwnd, HOTKEY_ID);
-        registered = false;
+    const int id = hotkey_id(action);
+    bool& is_registered = registered[id - 1];
+    if (is_registered){
+        UnregisterHotKey(hwnd, id);
+        is_registered = false;
     }
     if (text.empty()) return;
 
@@ -105,23 +113,23 @@ void GlobalHotkey::set_shortcut(const std::string& text){
     if (shortcut->alt) modifiers |= MOD_ALT;
     if (shortcut->shift) modifiers |= MOD_SHIFT;
 
-    if (!RegisterHotKey(hwnd, HOTKEY_ID, modifiers, virtual_key(shortcut->key))){
+    if (!RegisterHotKey(hwnd, id, modifiers, virtual_key(shortcut->key))){
         const DWORD error = GetLastError();
         if (error == ERROR_HOTKEY_ALREADY_REGISTERED)
             throw std::runtime_error(std::format("{} is taken, by Windows or another app. Choose another.", text));
-        throw std::runtime_error(std::format("Couldn't make {} the capture shortcut: error {}", text, error));
+        throw std::runtime_error(std::format("Couldn't make {} a shortcut: error {}", text, error));
     }
-    registered = true;
+    is_registered = true;
 }
 
-void send_hotkey_press(){
+void send_hotkey_press(HotkeyAction action){
     const HWND hwnd = FindWindowExW(HWND_MESSAGE, nullptr, WINDOW_CLASS, nullptr);
     if (!hwnd) throw std::runtime_error("The app isn't running");
-    if (!PostMessageW(hwnd, PRESS, 0, 0))
+    if (!PostMessageW(hwnd, PRESS, static_cast<WPARAM>(hotkey_id(action)), 0))
         throw std::runtime_error(std::format("Couldn't send the capture to the app: error {}", GetLastError()));
 }
 
-std::string capture_command(){
+std::string hotkey_command(HotkeyAction){
     return "";
 }
 
@@ -140,8 +148,10 @@ std::string capture_command(){
 // FLTK
 #include <FL/Fl.H>
 
-// What a press is sent as. One byte, so it arrives whole or not at all.
-static constexpr char PRESS = 'c';
+// What a press is sent as, for each action. One byte, so it arrives whole
+// or not at all.
+static constexpr char CAPTURE_PRESS = 'c';
+static constexpr char READ_SCREEN_PRESS = 's';
 
 // Closes the socket when it goes out of scope, unless released
 struct Socket {
@@ -178,7 +188,7 @@ static bool connect_to(int fd, const sockaddr_un& address){
     return connect(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0;
 }
 
-GlobalHotkey::GlobalHotkey(std::function<void()> on_press) : on_press(std::move(on_press)){
+GlobalHotkey::GlobalHotkey(std::function<void(HotkeyAction)> on_press) : on_press(std::move(on_press)){
     const sockaddr_un address = socket_address();
     Socket fd(new_socket());
 
@@ -223,26 +233,30 @@ void GlobalHotkey::on_message(int fd, void* data){
     close(fd);
     // Anything else, e.g. a connection only checking whether the app runs,
     // is ignored
-    if (n == 1 && message == PRESS) static_cast<GlobalHotkey*>(data)->on_press();
+    if (n != 1) return;
+    auto* self = static_cast<GlobalHotkey*>(data);
+    if (message == CAPTURE_PRESS) self->on_press(HotkeyAction::Capture);
+    else if (message == READ_SCREEN_PRESS) self->on_press(HotkeyAction::ReadScreen);
 }
 
-void GlobalHotkey::set_shortcut(const std::string&){}
+void GlobalHotkey::set_shortcut(HotkeyAction, const std::string&){}
 
-void send_hotkey_press(){
+void send_hotkey_press(HotkeyAction action){
     const sockaddr_un address = socket_address();
     Socket fd(new_socket());
     if (!connect_to(fd.fd, address)) throw std::runtime_error("The app isn't running");
-    if (write(fd.fd, &PRESS, 1) != 1)
+    const char press = action == HotkeyAction::Capture ? CAPTURE_PRESS : READ_SCREEN_PRESS;
+    if (write(fd.fd, &press, 1) != 1)
         throw std::runtime_error(std::format("Couldn't send the capture to the app: {}", std::strerror(errno)));
 }
 
-std::string capture_command(){
+std::string hotkey_command(HotkeyAction action){
     std::error_code error;
     const std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", error);
     const std::string path = error ? "hearstash" : exe.string();
     // Hyprland and most desktops run it through sh
     const std::string quoted = path.find(' ') == std::string::npos ? path : std::format("'{}'", path);
-    return std::format("{} {}", quoted, CAPTURE_ARG);
+    return std::format("{} {}", quoted, action == HotkeyAction::Capture ? CAPTURE_ARG : READ_SCREEN_ARG);
 }
 
 #endif

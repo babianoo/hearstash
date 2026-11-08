@@ -1,8 +1,11 @@
 #include "core/screenshot.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <format>
+#include <filesystem>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 
@@ -117,6 +120,28 @@ Image take_screenshot(){
     return image;
 }
 
+std::string focused_app(){
+    const HWND window = GetForegroundWindow();
+    if (!window) return "";
+    DWORD pid = 0;
+    GetWindowThreadProcessId(window, &pid);
+    const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return "";
+    wchar_t path[1024];
+    DWORD size = static_cast<DWORD>(std::size(path));
+    const BOOL ok = QueryFullProcessImageNameW(process, 0, path, &size);
+    CloseHandle(process);
+    if (!ok) return "";
+
+    // The program's file name, e.g. "fate.exe", in UTF-8 and lowercase
+    const std::wstring name = std::filesystem::path(std::wstring(path, size)).filename().wstring();
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, name.data(), static_cast<int>(name.size()), nullptr, 0, nullptr, nullptr);
+    std::string utf8(static_cast<size_t>(std::max(bytes, 0)), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, name.data(), static_cast<int>(name.size()), utf8.data(), bytes, nullptr, nullptr);
+    std::ranges::transform(utf8, utf8.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    return utf8;
+}
+
 #else
 
 #include <cerrno>
@@ -196,6 +221,61 @@ static std::string hyprland_focused_monitor(){
         // All of them, then
     }
     return "";
+}
+
+std::string focused_app(){
+    if (!std::getenv("HYPRLAND_INSTANCE_SIGNATURE")) return "";
+    try {
+        // A Wine or Proton game's class is its .exe's name or steam_app_<id>
+        const std::vector<std::uint8_t> output = run({"hyprctl", "-j", "activewindow"});
+        return nlohmann::json::parse(output).value("class", "");
+    } catch (const std::exception&){
+        return "";
+    }
+}
+
+Rect monitor_in_screenshot(std::string_view layout_json, std::string_view output, int image_w, int image_h){
+    struct Monitor { std::string name; double x, y, w, h; };
+    std::vector<Monitor> monitors;
+    try {
+        for (const nlohmann::json& o : nlohmann::json::parse(layout_json).at("outputs")){
+            if (!o.value("enabled", false)) continue;
+            const nlohmann::json& pos = o.at("pos");
+            const nlohmann::json& size = o.at("size");
+            double w = size.at("width").get<double>(), h = size.at("height").get<double>();
+            // KScreen's rotations: 1 none, 2 left, 4 upside down, 8 right
+            const int rotation = o.value("rotation", 1);
+            if (rotation == 2 || rotation == 8) std::swap(w, h);
+            // Its position is in logical pixels, its size in real ones
+            const double scale = o.value("scale", 1.0) > 0 ? o.value("scale", 1.0) : 1.0;
+            monitors.push_back({o.value("name", ""), pos.at("x").get<double>(), pos.at("y").get<double>(),
+                                w / scale, h / scale});
+        }
+    } catch (const nlohmann::json::exception&){
+        return {};
+    }
+
+    const auto found = std::ranges::find(monitors, output, &Monitor::name);
+    if (found == monitors.end() || image_w <= 0 || image_h <= 0) return {};
+
+    // The box around them all is the whole screenshot, maybe scaled
+    double left = found->x, top = found->y, right = found->x + found->w, bottom = found->y + found->h;
+    for (const Monitor& m : monitors){
+        left = std::min(left, m.x);
+        top = std::min(top, m.y);
+        right = std::max(right, m.x + m.w);
+        bottom = std::max(bottom, m.y + m.h);
+    }
+    const double sx = image_w / (right - left), sy = image_h / (bottom - top);
+    // E.g. monitors at different scales, which the portal may put together
+    // otherwise: better all of them than the wrong part
+    if (std::abs(sx - sy) > 0.02 * std::max(sx, sy)) return {};
+
+    const int x0 = static_cast<int>(std::lround((found->x - left) * sx));
+    const int y0 = static_cast<int>(std::lround((found->y - top) * sy));
+    const int x1 = static_cast<int>(std::lround((found->x + found->w - left) * sx));
+    const int y1 = static_cast<int>(std::lround((found->y + found->h - top) * sy));
+    return {.x = x0, .y = y0, .w = std::min(x1, image_w) - x0, .h = std::min(y1, image_h) - y0};
 }
 
 Image parse_png(const std::vector<std::uint8_t>& data){
@@ -385,6 +465,39 @@ static Image portal_screenshot(){
     return parse_png(png);
 }
 
+// KWin's name for the monitor with the focus, e.g. "DP-1". Empty when not
+// on KDE, or it can't tell.
+static std::string kde_active_output(){
+    sd_bus* opened = nullptr;
+    if (sd_bus_open_user(&opened) < 0) return "";
+    const Bus bus(opened);
+    BusError error;
+    sd_bus_message* reply = nullptr;
+    if (sd_bus_call_method(bus.get(), "org.kde.KWin", "/KWin", "org.kde.KWin", "activeOutputName",
+                           &error.error, &reply, "") < 0)
+        return "";
+    const Message owned(reply);
+    const char* name = nullptr;
+    if (sd_bus_message_read(reply, "s", &name) < 0 || !name) return "";
+    return name;
+}
+
+// The part of all, a screenshot of every monitor, that's the monitor
+// named output, as kscreen-doctor lays them out. all as it is if that
+// can't be told.
+static Image only_monitor(Image all, const std::string& output){
+    if (output.empty()) return all;
+    try {
+        const std::vector<std::uint8_t> layout = run({"kscreen-doctor", "-j"});
+        const Rect monitor = monitor_in_screenshot(std::string_view(reinterpret_cast<const char*>(layout.data()), layout.size()),
+                                                   output, all.width, all.height);
+        if (!monitor.empty()) return crop(all, monitor);
+    } catch (const std::exception&){
+        // Not installed, say
+    }
+    return all;
+}
+
 #endif
 
 Image take_screenshot(){
@@ -396,7 +509,10 @@ Image take_screenshot(){
     }
 #ifdef HAVE_SD_BUS
     try {
-        return portal_screenshot();
+        // Asked first: the portal's dialog, when it shows one, could take
+        // the focus
+        const std::string output = kde_active_output();
+        return only_monitor(portal_screenshot(), output);
     } catch (const std::runtime_error& e){
         throw std::runtime_error(std::format(
             "Couldn't take a screenshot: {}, and {}. Screenshots need the desktop's screenshot portal "

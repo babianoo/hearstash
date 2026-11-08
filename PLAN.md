@@ -332,11 +332,49 @@ Things to solve:
   A mismatch can mean whisper misheard.
 - Maybe later: keep a score, or add a card on a miss.
 
-### Possible: read game and VN text (OCR)
+### 8. Read game and VN text (OCR)
 
 For games and visual novels, where the line is on screen, not (only)
-heard. Not built yet. The engine is chosen: PaddleOCR's PP-OCRv6, small
-size, through onnxruntime (comparison below).
+heard. PaddleOCR's PP-OCRv6 small models through onnxruntime (comparison
+below).
+
+**Built (November 2026)**, on Linux; not yet built on Windows.
+`TextReader` (src/core/text_reader.h) runs the two models; everything
+around them that needs no model is in src/core/ocr_text.h, tested.
+
+A screen capture has its own shortcut (`hearstash --read-screen` on
+Linux, `Win+Alt+X` on Windows, set in Settings > Screen Text) and its own
+window, `ScreenWindow`: the capture window's twin, with the screenshot
+where the waveform is, and the same text, lookup, Translate and Add to
+Anki below (`LookupPanels`, src/ui/lookup_panels.h, shared by both). The
+capture window has no OCR. A screen capture reads the screenshot as it
+opens: the part kept for the game, or all of it. Dragging a rectangle
+reads that and keeps it for the game; Whole screen forgets it. Cards from
+it have no audio. The models (about 30 MB, from PaddlePaddle on Hugging
+Face at a fixed commit, SHA-1 checked) download the first time.
+
+`build/read_text <models folder> <png>...` reads saved screenshots, for
+checking the OCR without the app: all 22 test screenshots read exactly
+right, in 74 ms on average. Since the rules for the "next" arrow were
+tuned on those same screenshots, a second game is the real test.
+
+What changed from the plan below:
+
+- Since a screen capture is only taken to read the screen, it reads all
+  of it until a part is chosen, as the plan says, on any desktop.
+- The game is known where the desktop says which program has the focus
+  (`focused_app()` in src/core/screenshot.h): Windows and Hyprland. KDE
+  and GNOME don't, so there one part is kept for all programs. KDE could
+  say through a KWin script, which calls back over D-Bus; not done.
+- On KDE the portal's screenshot of every monitor is cut down to the one
+  with the focus: KWin names it, `kscreen-doctor -j` says where it is.
+- The model's list of characters lacks 14 common kanji (凧, 侭, 涜 ...)
+  and 331 rarer ones (呟, 躾 ...). Rendered and read back, most come out
+  as another real kanji (凧 as 応) or nothing (呟), which can't be
+  fixed afterwards; the few that come out as a Chinese form of
+  themselves (躲 for 躱) are turned back.
+- The "next" arrow is also read as a kana (と) after the last sentence,
+  so a single character after the last 。！？ on the screen is dropped.
 
 Why: the capture already has what it needs. The hotkey takes a
 screenshot, and the crop view remembers a rectangle. Reading the text in

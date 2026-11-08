@@ -16,7 +16,8 @@ class Fl_RGB_Image;
 // outside the rectangle is dimmed.
 //
 // Dragging inside the rectangle moves it, dragging its edges or corners
-// resizes it, and dragging outside it draws a new one.
+// resizes it, and dragging outside it draws a new one, as does dragging
+// inside it while it's all of the image.
 class CropView : public Fl_Widget {
 public:
     CropView(int x, int y, int w, int h);
@@ -29,6 +30,8 @@ public:
 
     // The crop, in the image's pixels
     Rect crop() const { return rect; }
+    // Whether the crop is all of the image
+    bool whole() const { return source && rect == Rect{0, 0, source->width, source->height}; }
     // Sets it, clamped to the image, and doesn't call on_change
     void crop(Rect rect);
     // Called when the user changes the crop, at the end of a drag

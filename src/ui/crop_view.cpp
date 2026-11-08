@@ -107,7 +107,7 @@ void CropView::set_cursor(int px, int py){
     else if (found == (RIGHT | TOP) || found == (LEFT | BOTTOM)) cursor = FL_CURSOR_NESW;
     else if (found & (LEFT | RIGHT)) cursor = FL_CURSOR_WE;
     else if (found & (TOP | BOTTOM)) cursor = FL_CURSOR_NS;
-    else if (px > r.x && px < r.x + r.w && py > r.y && py < r.y + r.h) cursor = FL_CURSOR_MOVE;
+    else if (px > r.x && px < r.x + r.w && py > r.y && py < r.y + r.h && !whole()) cursor = FL_CURSOR_MOVE;
     window()->cursor(source ? cursor : FL_CURSOR_DEFAULT);
 }
 
@@ -129,7 +129,9 @@ int CropView::handle(int event){
         const Rect r = on_screen();
         const bool inside = Fl::event_x() > r.x && Fl::event_x() < r.x + r.w
                          && Fl::event_y() > r.y && Fl::event_y() < r.y + r.h;
-        drag = edges ? Drag::Edges : inside ? Drag::Move : Drag::New;
+        // A crop of all of it can't move, and leaves no outside to draw a
+        // new one from, so dragging inside it draws one
+        drag = edges ? Drag::Edges : inside && !whole() ? Drag::Move : Drag::New;
         return 1;    // Needed to get FL_DRAG and FL_RELEASE
     }
     case FL_DRAG: {

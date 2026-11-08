@@ -61,6 +61,38 @@ static void test_shrink(){
     CHECK(wide.width == 80 && wide.height == 45);
 }
 
+static void test_resize(){
+    // A flat color stays flat, at any size
+    Image flat{.width = 3, .height = 2, .rgb = std::vector<std::uint8_t>(3 * 2 * 3, 100)};
+    const Image big = resize(flat, 7, 5);
+    CHECK(big.width == 7 && big.height == 5 && big.rgb.size() == 7 * 5 * 3);
+    bool all_100 = true;
+    for (std::uint8_t v : big.rgb) all_100 = all_100 && v == 100;
+    CHECK(all_100);
+
+    // Doubling a 0, 100 pair: the edges keep their values, the middle blends
+    Image pair{.width = 2, .height = 1, .rgb = {0, 0, 0, 100, 100, 100}};
+    const Image wide = resize(pair, 4, 1);
+    CHECK(wide.rgb[0] == 0 && wide.rgb[9] == 100);
+    CHECK(wide.rgb[3] == 25 && wide.rgb[6] == 75);
+
+    // Its shape can change
+    const Image squashed = resize(numbered(100, 10), 20, 30);
+    CHECK(squashed.width == 20 && squashed.height == 30);
+}
+
+static void test_rotate_left(){
+    // 3x2, pixel (x, y) is (x, y, 7)
+    const Image turned = rotate_left(numbered(3, 2));
+    CHECK(turned.width == 2 && turned.height == 3);
+    // The old top right corner is the new top left
+    CHECK(turned.rgb[0] == 2 && turned.rgb[1] == 0);
+    // The old top left corner is the new bottom left
+    CHECK(turned.rgb[(2 * 2 + 0) * 3] == 0 && turned.rgb[(2 * 2 + 0) * 3 + 1] == 0);
+    // The old bottom left corner is the new bottom right
+    CHECK(turned.rgb[(2 * 2 + 1) * 3] == 0 && turned.rgb[(2 * 2 + 1) * 3 + 1] == 1);
+}
+
 static void test_jpeg(){
     const std::vector<std::uint8_t> jpeg = encode_jpeg(numbered(64, 48), 85);
     // Starts and ends with JPEG's markers
@@ -117,15 +149,53 @@ static void test_png(){
     try { parse_png(data); } catch (const std::runtime_error&){ threw = true; }
     CHECK(threw);
 }
+
+// kscreen-doctor -j's layout, cut down: a 1920x1080 monitor beside a 4K
+// one, lower down
+static const char* LAYOUT = R"({"outputs": [
+    {"name": "HDMI-A-1", "enabled": true, "pos": {"x": 1920, "y": 0},
+     "size": {"width": 3840, "height": 2160}, "scale": 1, "rotation": 1},
+    {"name": "DP-1", "enabled": true, "pos": {"x": 0, "y": 504},
+     "size": {"width": 1920, "height": 1080}, "scale": 1, "rotation": 1},
+    {"name": "DP-2", "enabled": false, "pos": {"x": 0, "y": 0},
+     "size": {"width": 800, "height": 600}, "scale": 1, "rotation": 1}
+]})";
+
+static void test_monitor_in_screenshot(){
+    // The portal's screenshot is the box around both, 5760x2160
+    CHECK(monitor_in_screenshot(LAYOUT, "DP-1", 5760, 2160) == (Rect{.x = 0, .y = 504, .w = 1920, .h = 1080}));
+    CHECK(monitor_in_screenshot(LAYOUT, "HDMI-A-1", 5760, 2160) == (Rect{.x = 1920, .y = 0, .w = 3840, .h = 2160}));
+    // At half the size
+    CHECK(monitor_in_screenshot(LAYOUT, "DP-1", 2880, 1080) == (Rect{.x = 0, .y = 252, .w = 960, .h = 540}));
+    // A screenshot of another shape, a monitor that isn't there, one
+    // that's off, or a layout that can't be read: no part
+    CHECK(monitor_in_screenshot(LAYOUT, "DP-1", 3840, 2160).empty());
+    CHECK(monitor_in_screenshot(LAYOUT, "DP-9", 5760, 2160).empty());
+    CHECK(monitor_in_screenshot(LAYOUT, "DP-2", 5760, 2160).empty());
+    CHECK(monitor_in_screenshot("not json", "DP-1", 5760, 2160).empty());
+
+    // Turned on its side, and scaled: a 4K monitor at 200% is 1080x1920
+    // logical pixels standing up
+    const char* turned = R"({"outputs": [
+        {"name": "A", "enabled": true, "pos": {"x": 0, "y": 0},
+         "size": {"width": 3840, "height": 2160}, "scale": 2, "rotation": 2},
+        {"name": "B", "enabled": true, "pos": {"x": 1080, "y": 0},
+         "size": {"width": 1920, "height": 1080}, "scale": 1, "rotation": 1}]})";
+    CHECK(monitor_in_screenshot(turned, "A", 3000, 1920) == (Rect{.x = 0, .y = 0, .w = 1080, .h = 1920}));
+    CHECK(monitor_in_screenshot(turned, "B", 3000, 1920) == (Rect{.x = 1080, .y = 0, .w = 1920, .h = 1080}));
+}
 #endif
 
 int main(){
     test_crop();
     test_shrink();
+    test_resize();
+    test_rotate_left();
     test_jpeg();
     test_ppm();
 #ifndef _WIN32
     test_png();
+    test_monitor_in_screenshot();
 #endif
     if (failures == 0) std::puts("All image tests passed");
     return failures;

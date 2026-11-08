@@ -58,6 +58,57 @@ Image shrink_to_height(const Image& image, int max_height){
     return out;
 }
 
+Image resize(const Image& image, int width, int height){
+    width = std::max(1, width);
+    height = std::max(1, height);
+    Image out{.width = width, .height = height, .rgb = std::vector<std::uint8_t>(static_cast<size_t>(width) * height * 3)};
+    if (image.empty()) return out;
+
+    // For each new column, the two old ones it falls between and how far
+    // along. Computed once, not per pixel.
+    struct Sample { int a, b; float t; };
+    auto samples = [](int from, int to){
+        std::vector<Sample> s(static_cast<size_t>(to));
+        const float scale = static_cast<float>(from) / static_cast<float>(to);
+        for (int i = 0; i < to; ++i){
+            // The new pixel's center, in old pixels
+            const float pos = std::max(0.0f, (static_cast<float>(i) + 0.5f) * scale - 0.5f);
+            const int a = std::min(static_cast<int>(pos), from - 1);
+            s[static_cast<size_t>(i)] = {a, std::min(a + 1, from - 1), pos - static_cast<float>(a)};
+        }
+        return s;
+    };
+    const std::vector<Sample> xs = samples(image.width, width), ys = samples(image.height, height);
+
+    for (int y = 0; y < height; ++y){
+        const Sample& sy = ys[static_cast<size_t>(y)];
+        const std::uint8_t* top = &image.rgb[static_cast<size_t>(sy.a) * image.width * 3];
+        const std::uint8_t* bottom = &image.rgb[static_cast<size_t>(sy.b) * image.width * 3];
+        std::uint8_t* row = &out.rgb[static_cast<size_t>(y) * width * 3];
+        for (int x = 0; x < width; ++x){
+            const Sample& sx = xs[static_cast<size_t>(x)];
+            for (int c = 0; c < 3; ++c){
+                const float t = top[sx.a * 3 + c] + (top[sx.b * 3 + c] - top[sx.a * 3 + c]) * sx.t;
+                const float b = bottom[sx.a * 3 + c] + (bottom[sx.b * 3 + c] - bottom[sx.a * 3 + c]) * sx.t;
+                row[x * 3 + c] = static_cast<std::uint8_t>(std::clamp(t + (b - t) * sy.t + 0.5f, 0.0f, 255.0f));
+            }
+        }
+    }
+    return out;
+}
+
+Image rotate_left(const Image& image){
+    Image out{.width = image.height, .height = image.width, .rgb = std::vector<std::uint8_t>(image.rgb.size())};
+    for (int y = 0; y < image.height; ++y)
+        for (int x = 0; x < image.width; ++x){
+            // The old top right corner becomes the new top left
+            const size_t from = (static_cast<size_t>(y) * image.width + x) * 3;
+            const size_t to = (static_cast<size_t>(image.width - 1 - x) * out.width + y) * 3;
+            std::copy_n(&image.rgb[from], 3, &out.rgb[to]);
+        }
+    return out;
+}
+
 // libjpeg's default error handler prints and calls exit(). This one
 // jumps back to compress() instead: an exception can't safely unwind
 // through libjpeg's C code.

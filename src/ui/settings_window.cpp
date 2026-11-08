@@ -35,9 +35,10 @@
 
 // Same categories as japanese-helper, in sidebar order, then the rolling
 // buffer's and Anki's
-static constexpr const char* CATEGORY_NAMES[] = {"General", "History", "API", "Speech-to-Text", "Buffer", "Anki"};
+static constexpr const char* CATEGORY_NAMES[] = {"General", "History", "API", "Speech-to-Text", "Buffer",
+                                                  "Screen Text", "Anki"};
 // Indexes into CATEGORY_NAMES
-enum Category : size_t { GENERAL, HISTORY, API, SPEECH_TO_TEXT, BUFFER, ANKI };
+enum Category : size_t { GENERAL, HISTORY, API, SPEECH_TO_TEXT, BUFFER, SCREEN_TEXT, ANKI };
 
 static constexpr int SIDEBAR_W = 160;
 static constexpr int CATEGORY_H = 36;
@@ -113,6 +114,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
         if (i == API) add_api_settings(page_x, page_w);
         if (i == SPEECH_TO_TEXT) add_speech_settings(page_x, page_w);
         if (i == BUFFER) add_buffer_settings(page_x, page_w);
+        if (i == SCREEN_TEXT) add_screen_text_settings(page_x, page_w);
         if (i == ANKI) add_anki_settings(page_x, page_w);
 
         page->end();
@@ -265,6 +267,7 @@ void SettingsWindow::on_close(Fl_Widget*, void* data){
     self->apply_buffer_seconds();
     self->apply_quality();
     if (self->shortcut_input) self->shortcut_input->stop_waiting();
+    if (self->screen_shortcut_input) self->screen_shortcut_input->stop_waiting();
     self->win.hide();
 }
 
@@ -417,6 +420,7 @@ void SettingsWindow::select(size_t i){
     apply_buffer_seconds();
     apply_quality();
     if (shortcut_input) shortcut_input->stop_waiting();
+    if (screen_shortcut_input) screen_shortcut_input->stop_waiting();
     // Already done when the category was clicked, but not when it's
     // selected from code
     categories[i]->setonly();
@@ -654,19 +658,25 @@ void SettingsWindow::add_buffer_settings(int x, int w){
     buffer_status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
     y += buffer_status->h() + 14;
 
-    Fl_Box* label = new Fl_Box(left, y, right - left, 20, "Capture shortcut");
+    add_hotkey_settings(left, right, y, HotkeyAction::Capture);
+}
+
+void SettingsWindow::add_hotkey_settings(int left, int right, int& y, HotkeyAction action){
+    const bool capture = action == HotkeyAction::Capture;
+    Fl_Box* label = new Fl_Box(left, y, right - left, 20, capture ? "Capture shortcut" : "Screen capture shortcut");
     label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     y += label->h() + 4;
 
     // On Linux, the command to bind to a key, in a box it can be copied
     // from. None on Windows, where the app takes the key itself.
-    const std::string command = capture_command();
+    const std::string command = hotkey_command(action);
     if (command.empty()){
-        shortcut_input = new ShortcutInput(left, y, SHORTCUT_W, PILL_H);
-        shortcut_input->shortcut(settings.get().buffer.shortcut);
-        shortcut_input->callback(on_shortcut, this);
+        ShortcutInput* input = new ShortcutInput(left, y, SHORTCUT_W, PILL_H);
+        input->shortcut(capture ? settings.get().buffer.shortcut : settings.get().screen_text.shortcut);
+        input->callback(capture ? on_shortcut : on_screen_shortcut, this);
         // Otherwise pressing the shortcut there would capture
-        shortcut_input->on_waiting = [this](bool waiting){ capturer.pause_hotkey(waiting); };
+        input->on_waiting = [this](bool waiting){ capturer.pause_hotkey(waiting); };
+        (capture ? shortcut_input : screen_shortcut_input) = input;
 
         Fl_Box* note = new Fl_Box(left + SHORTCUT_W + 10, y, right - left - SHORTCUT_W - 10, PILL_H,
                                   "Click it, then press the keys. Works in any app, even fullscreen.");
@@ -682,17 +692,50 @@ void SettingsWindow::add_buffer_settings(int x, int w){
 
         // Wayland lets no app grab a key for itself
         Fl_Box* note = new Fl_Box(left, y, right - left, 32,
-                                  "Bind a key to it in your desktop's settings, e.g. in hyprland.conf:\n"
-                                  "bind = SUPER, A, exec, <the command>");
+                                  capture ? "Bind a key to it in your desktop's settings, e.g. in hyprland.conf:\n"
+                                            "bind = SUPER, A, exec, <the command>"
+                                          : "Bind a key to it in your desktop's settings, e.g. in hyprland.conf:\n"
+                                            "bind = SUPER, S, exec, <the command>");
         note->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
         note->labelsize(12);
         note->labelcolor(DIM);
         y += note->h() + 4;
     }
 
-    hotkey_status = new Fl_Box(left, y, right - left, 20);
-    hotkey_status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-    hotkey_status->labelcolor(ERROR_COLOR);
+    Fl_Box* status = new Fl_Box(left, y, right - left, 20);
+    status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    status->labelcolor(ERROR_COLOR);
+    (capture ? hotkey_status : screen_hotkey_status) = status;
+    y += status->h() + 4;
+}
+
+// What the screen capture is for, then its shortcut
+void SettingsWindow::add_screen_text_settings(int x, int w){
+    const int left = x + MARGIN, right = x + w - MARGIN;
+    // Lines up with the first category in the sidebar, like the API page
+    int y = MARGIN + (CATEGORY_H - 20) / 2;
+
+    Fl_Box* about = new Fl_Box(left, y, right - left, 64,
+                               "For games and visual novels: a screen capture reads the text on the screen, "
+                               "to look up and add to Anki like a transcript. Drag around the text box in it "
+                               "to read only that; it's kept for the game.");
+    about->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+    y += about->h() + 14;
+
+    add_hotkey_settings(left, right, y, HotkeyAction::ReadScreen);
+
+    Fl_Box* models = new Fl_Box(left, y + 10, right - left, 32,
+                                "The models that read it (PaddleOCR, about 30 MB) are downloaded the first time.");
+    models->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+    models->labelsize(12);
+    models->labelcolor(DIM);
+}
+
+void SettingsWindow::on_screen_shortcut(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const std::string shortcut = self->screen_shortcut_input->shortcut();
+    // Like on_shortcut
+    self->settings.update([&shortcut](Settings& s){ s.screen_text.shortcut = shortcut; });
 }
 
 void SettingsWindow::on_buffer_enabled(Fl_Widget*, void* data){
@@ -750,8 +793,12 @@ void SettingsWindow::refresh_buffer(){
     buffer_status->redraw();
 
     if (hotkey_status){
-        hotkey_status->copy_label(capturer.hotkey_error().c_str());
+        hotkey_status->copy_label(capturer.hotkey_error(HotkeyAction::Capture).c_str());
         hotkey_status->redraw();
+    }
+    if (screen_hotkey_status){
+        screen_hotkey_status->copy_label(capturer.hotkey_error(HotkeyAction::ReadScreen).c_str());
+        screen_hotkey_status->redraw();
     }
 }
 
