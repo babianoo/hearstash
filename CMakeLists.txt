@@ -28,6 +28,17 @@ pkg_check_modules(CAIRO QUIET cairo)
 # For src/ui/clipboard.cpp, which works around FLTK's Wayland clipboard.
 # Without it (an X11-only system) the app uses FLTK's clipboard as is.
 pkg_check_modules(WAYLAND_CLIENT QUIET IMPORTED_TARGET wayland-client)
+if(NOT WIN32)
+    # For screenshots from the desktop's screenshot portal, which saves them
+    # as PNG. libpng is usually there already, since FLTK loads PNGs with it.
+    find_package(PNG REQUIRED)
+    # sd-bus, to talk to the portal over D-Bus. Without it the app only
+    # takes screenshots with grim, so only on wlroots desktops.
+    pkg_check_modules(LIBSYSTEMD QUIET IMPORTED_TARGET libsystemd)
+    if(NOT LIBSYSTEMD_FOUND)
+        message(STATUS "libsystemd not found: screenshots will only work with grim, on wlroots desktops")
+    endif()
+endif()
 
 # --- Dependencies built with the app (git submodules in external/) ---
 # Fetch them with: git submodule update --init
@@ -151,6 +162,13 @@ if(WAYLAND_CLIENT_FOUND)
     target_link_libraries(hearstash PRIVATE PkgConfig::WAYLAND_CLIENT)
     target_compile_definitions(hearstash PRIVATE HAVE_WAYLAND_CLIENT)
 endif()
+if(NOT WIN32)
+    target_link_libraries(hearstash PRIVATE PNG::PNG)
+endif()
+if(LIBSYSTEMD_FOUND)
+    target_link_libraries(hearstash PRIVATE PkgConfig::LIBSYSTEMD)
+    target_compile_definitions(hearstash PRIVATE HAVE_SD_BUS)
+endif()
 
 # --- Tests: ctest --test-dir build ---
 # Plain executables for the code that doesn't need a device or a window
@@ -175,9 +193,13 @@ add_executable(image_test tests/image_test.cpp src/core/image.cpp src/core/scree
 target_compile_options(image_test PRIVATE -Wall -Wextra)
 target_include_directories(image_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(image_test PRIVATE JPEG::JPEG nlohmann_json::nlohmann_json)
-# For screenshot.cpp's GDI capture, which the test doesn't run
+# For screenshot.cpp's GDI capture, which the test doesn't run, and its
+# PNG decoding on Linux, which it does. It's built without HAVE_SD_BUS, so
+# it doesn't need libsystemd.
 if(WIN32)
     target_link_libraries(image_test PRIVATE gdi32 user32)
+else()
+    target_link_libraries(image_test PRIVATE PNG::PNG)
 endif()
 add_test(NAME image COMMAND image_test)
 

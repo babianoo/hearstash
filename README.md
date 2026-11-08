@@ -38,8 +38,11 @@ Installed on the system:
 - nlohmann_json 3.11 or newer
 - libjpeg-turbo
 - pkg-config
+- On Linux: libpng, for screenshots from the desktop's screenshot portal
 - Optional, on Linux: `wayland-client`, for a clipboard that works under
   Wayland
+- Optional, on Linux: libsystemd (its sd-bus), for screenshots on KDE,
+  GNOME and X11. Without it, screenshots only work with grim
 
 Built with the app, as git submodules in `external/`:
 
@@ -138,9 +141,15 @@ Everything is in **Settings**:
 
 ### Screenshots on Linux
 
-Screenshots use [grim](https://sr.ht/~emersion/grim/), so they only work
-on wlroots desktops such as Hyprland or Sway. GNOME, KDE and X11 aren't
-supported yet.
+On wlroots desktops such as Hyprland or Sway, screenshots use
+[grim](https://sr.ht/~emersion/grim/) if it's installed. Elsewhere (KDE,
+GNOME, X11) they go through the desktop's screenshot portal
+(xdg-desktop-portal), which:
+
+- may ask once whether Hearstash can take screenshots,
+- takes all your monitors, not just the one with the video, so crop to
+  it as usual,
+- is slower: about 2 s on KDE before the capture window opens.
 
 ## Using a capture
 
@@ -184,6 +193,8 @@ The app listens to everything your computer plays, so:
 ## Known gaps
 
 - Adding a card to a running Anki hasn't been tried by hand yet.
+- On KDE and GNOME, the screenshot portal makes the capture window take
+  about 2 s to open.
 - On Windows, screenshots use GDI; some hardware-accelerated video may
   come out black. DRM-protected video (Netflix and the like) always does.
 - No tray icon or start-with-Windows yet.

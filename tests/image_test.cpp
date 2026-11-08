@@ -87,11 +87,46 @@ static void test_ppm(){
     CHECK(threw);
 }
 
+#ifndef _WIN32
+#include <png.h>
+
+static void test_png(){
+    // A 3x2 PNG with alpha, which comes back as RGB without it
+    const std::uint8_t rgba[] = {1, 2, 3, 255,  4, 5, 6, 255,  7, 8, 9, 255,
+                                 10, 11, 12, 255,  13, 14, 15, 255,  16, 17, 18, 255};
+    png_image png{};
+    png.version = PNG_IMAGE_VERSION;
+    png.width = 3;
+    png.height = 2;
+    png.format = PNG_FORMAT_RGBA;
+    png_alloc_size_t size = 0;
+    CHECK(png_image_write_to_memory(&png, nullptr, &size, 0, rgba, 0, nullptr));
+    std::vector<std::uint8_t> data(size);
+    CHECK(png_image_write_to_memory(&png, data.data(), &size, 0, rgba, 0, nullptr));
+    data.resize(size);
+
+    const Image image = parse_png(data);
+    CHECK(image.width == 3 && image.height == 2);
+    CHECK(image.rgb == std::vector<std::uint8_t>({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}));
+
+    bool threw = false;
+    try { parse_png({1, 2, 3}); } catch (const std::runtime_error&){ threw = true; }
+    CHECK(threw);
+    threw = false;
+    data.resize(data.size() / 2);    // Cut short
+    try { parse_png(data); } catch (const std::runtime_error&){ threw = true; }
+    CHECK(threw);
+}
+#endif
+
 int main(){
     test_crop();
     test_shrink();
     test_jpeg();
     test_ppm();
+#ifndef _WIN32
+    test_png();
+#endif
     if (failures == 0) std::puts("All image tests passed");
     return failures;
 }

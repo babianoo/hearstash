@@ -6,7 +6,7 @@ Helper, and takes ideas from Yomitan and from mining cards with mpv +
 mpvacious.
 
 **Status (November 2026): phases 1–7 work on Linux and Windows.** On
-Linux with PulseAudio or PipeWire, and a wlroots desktop like Hyprland
+Linux with PulseAudio or PipeWire, and grim or the screenshot portal
 for screenshots; on Windows with WASAPI loopback, `RegisterHotKey` and
 GDI. What's still to check on Windows by hand is listed under "Windows"
 below.
@@ -215,8 +215,11 @@ Done when: the screenshot shows the video, not a black box, and the crop
 is kept between cards.
 
 **Linux: done.** grim takes the screenshot (on Hyprland, of the monitor
-`hyprctl` says has the focus), which is only on wlroots desktops; GNOME
-and KDE would need the screenshot portal. Two changes from the plan:
+`hyprctl` says has the focus), which is only on wlroots desktops.
+Elsewhere (KDE, GNOME, X11) the XDG Screenshot portal does, over sd-bus,
+non-interactive: it saves a PNG of all the monitors (KDE and GNOME put it
+in ~/Pictures), which the app reads with libpng and deletes. On KDE that
+takes about 1.9 s for 5760x2160, nearly all of it the portal. Two changes from the plan:
 JPEG goes through libjpeg-turbo, which FLTK already uses, instead of
 `stb_image_write` (fetching stb as a new submodule was blocked in the
 session that built this; either works), and the shrinking before saving
@@ -285,7 +288,10 @@ Still to try by hand:
   and allows Yomitan-style lookup by hovering instead of selecting.
 - Whisper segment timestamps, so selecting a word can pick its sentence
   and that sentence's audio by itself.
-- Linux: screenshots on GNOME and KDE (the screenshot portal), and on X11.
+- Linux: a faster screenshot than the portal's on KDE, e.g. taking it on
+  a thread and opening the capture window before it's done, once it's
+  clear when the portal has grabbed the screen. GNOME and X11 through the
+  portal are untried.
 - Running in the background: start with Windows, a tray icon, closing to
   the tray.
 

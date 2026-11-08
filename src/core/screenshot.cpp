@@ -130,6 +130,17 @@ Image take_screenshot(){
 
 // JSON
 #include <nlohmann/json.hpp>
+// Decoding the screenshot portal's PNG files
+#include <png.h>
+
+#ifdef HAVE_SD_BUS
+#include <chrono>
+#include <memory>
+#include <string_view>
+
+// D-Bus, for the screenshot portal
+#include <systemd/sd-bus.h>
+#endif
 
 extern char** environ;
 
@@ -187,7 +198,29 @@ static std::string hyprland_focused_monitor(){
     return "";
 }
 
-Image take_screenshot(){
+Image parse_png(const std::vector<std::uint8_t>& data){
+    // libpng's simplified API: it converts whatever the file holds (16-bit,
+    // a palette, alpha) to 8-bit RGB
+    png_image png{};
+    png.version = PNG_IMAGE_VERSION;
+    if (!png_image_begin_read_from_memory(&png, data.data(), data.size()))
+        throw std::runtime_error(std::format("The screenshot isn't a PNG image: {}", png.message));
+    png.format = PNG_FORMAT_RGB;
+
+    Image image{.width = static_cast<int>(png.width), .height = static_cast<int>(png.height), .rgb = {}};
+    image.rgb.resize(PNG_IMAGE_SIZE(png));
+    if (!png_image_finish_read(&png, nullptr, image.rgb.data(), 0, nullptr)){
+        const std::string message = png.message;
+        png_image_free(&png);
+        throw std::runtime_error(std::format("Couldn't read the screenshot's PNG image: {}", message));
+    }
+    return image;
+}
+
+// A screenshot from grim, of the focused monitor on Hyprland, or all of
+// them. Throws std::runtime_error if grim isn't installed or can't, as on
+// any desktop but a wlroots one.
+static Image grim_screenshot(){
     // PPM: grim doesn't spend time compressing it, and it's simple to read
     std::vector<std::string> args{"grim", "-t", "ppm"};
     if (const std::string monitor = hyprland_focused_monitor(); !monitor.empty()){
@@ -195,14 +228,187 @@ Image take_screenshot(){
         args.push_back(monitor);
     }
     args.push_back("-");    // To stdout
+    return parse_ppm(run(args));
+}
 
+#ifdef HAVE_SD_BUS
+
+namespace {
+// sd-bus objects, released when they go out of scope
+struct BusDeleter { void operator()(sd_bus* bus) const { sd_bus_flush_close_unref(bus); } };
+struct SlotDeleter { void operator()(sd_bus_slot* slot) const { sd_bus_slot_unref(slot); } };
+struct MessageDeleter { void operator()(sd_bus_message* message) const { sd_bus_message_unref(message); } };
+using Bus = std::unique_ptr<sd_bus, BusDeleter>;
+using Slot = std::unique_ptr<sd_bus_slot, SlotDeleter>;
+using Message = std::unique_ptr<sd_bus_message, MessageDeleter>;
+
+struct BusError {
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    ~BusError(){ sd_bus_error_free(&error); }
+};
+
+// What the portal's Response signal said
+struct Response {
+    bool arrived = false;
+    std::uint32_t code = 2;
+    std::string uri;
+    int error = 0;    // A negative errno if the signal couldn't be read
+};
+}
+
+// sd-bus calls this with the Request's Response: a code (0 done, 1 the
+// user said no, 2 anything else) and results, of which "uri" is the file
+static int on_response(sd_bus_message* message, void* data, sd_bus_error*){
+    Response& response = *static_cast<Response*>(data);
+    response.arrived = true;
+    int r = sd_bus_message_read(message, "u", &response.code);
+    if (r >= 0) r = sd_bus_message_enter_container(message, 'a', "{sv}");
+    while (r > 0 && (r = sd_bus_message_enter_container(message, 'e', "sv")) > 0){
+        const char* key = nullptr;
+        r = sd_bus_message_read(message, "s", &key);
+        if (r >= 0 && std::strcmp(key, "uri") == 0){
+            const char* uri = nullptr;
+            r = sd_bus_message_read(message, "v", "s", &uri);
+            if (r >= 0) response.uri = uri;
+        }
+        else if (r >= 0) r = sd_bus_message_skip(message, "v");
+        if (r >= 0) r = sd_bus_message_exit_container(message);
+    }
+    if (r < 0) response.error = r;
+    return 0;
+}
+
+// The path of a file:// URI, with its %XX escapes decoded. Empty if it
+// isn't one.
+static std::string file_uri_path(const std::string& uri){
+    constexpr std::string_view scheme = "file://";
+    if (!uri.starts_with(scheme)) return "";
+    std::string path;
+    for (size_t i = scheme.size(); i < uri.size(); ++i){
+        if (uri[i] == '%' && i + 2 < uri.size() && std::isxdigit(uri[i + 1]) && std::isxdigit(uri[i + 2])){
+            path += static_cast<char>(std::stoi(uri.substr(i + 1, 2), nullptr, 16));
+            i += 2;
+        }
+        else path += uri[i];
+    }
+    return path;
+}
+
+static std::vector<std::uint8_t> read_file(const std::string& path){
+    const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) throw std::runtime_error(std::format("couldn't open {}: {}", path, std::strerror(errno)));
+    std::vector<std::uint8_t> data;
+    std::uint8_t chunk[1 << 16];
+    for (;;){
+        const ssize_t n = read(fd, chunk, sizeof(chunk));
+        if (n > 0) data.insert(data.end(), chunk, chunk + n);
+        else if (n == 0) break;
+        else if (errno != EINTR){
+            const int error = errno;
+            close(fd);
+            throw std::runtime_error(std::format("couldn't read {}: {}", path, std::strerror(error)));
+        }
+    }
+    close(fd);
+    return data;
+}
+
+// A screenshot of all the monitors from the XDG Screenshot portal
+// (org.freedesktop.portal.Screenshot), which KDE, GNOME and Hyprland
+// have. It answers through a Request object's Response signal; the portal
+// saves the picture as a PNG file (KDE and GNOME put it in ~/Pictures),
+// which is read, then deleted, since only the app wanted it. Throws
+// std::runtime_error if there's no portal, the user says no, or it doesn't
+// answer within a minute (the first time it may ask the user to allow it).
+static Image portal_screenshot(){
+    const auto fail = [](const char* what, int r){
+        return std::runtime_error(std::format("{}: {}", what, std::strerror(-r)));
+    };
+
+    sd_bus* opened = nullptr;
+    if (const int r = sd_bus_open_user(&opened); r < 0) throw fail("couldn't connect to D-Bus", r);
+    const Bus bus(opened);
+
+    // The portal makes the Request at a path it builds from our name on the
+    // bus and a token we choose, so its Response can be listened for before
+    // asking, and can't be missed
+    const char* unique_name = nullptr;
+    if (const int r = sd_bus_get_unique_name(bus.get(), &unique_name); r < 0) throw fail("couldn't connect to D-Bus", r);
+    std::string sender = unique_name + 1;    // Without the ":"
+    std::ranges::replace(sender, '.', '_');
+    static unsigned count = 0;
+    const std::string token = std::format("hearstash{}_{}", getpid(), ++count);
+    const std::string request = std::format("/org/freedesktop/portal/desktop/request/{}/{}", sender, token);
+
+    Response response;
+    sd_bus_slot* matched = nullptr;
+    if (const int r = sd_bus_match_signal(bus.get(), &matched, "org.freedesktop.portal.Desktop", request.c_str(),
+                                          "org.freedesktop.portal.Request", "Response", on_response, &response); r < 0)
+        throw fail("couldn't listen to the screenshot portal", r);
+    const Slot slot(matched);
+
+    // Not interactive: no dialog to pick an area, just the whole desktop.
+    // No parent window, since the capture window isn't open yet.
+    BusError error;
+    sd_bus_message* replied = nullptr;
+    if (sd_bus_call_method(bus.get(), "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                           "org.freedesktop.portal.Screenshot", "Screenshot", &error.error, &replied,
+                           "sa{sv}", "", 2, "handle_token", "s", token.c_str(), "interactive", "b", 0) < 0)
+        throw std::runtime_error(std::format("the screenshot portal failed: {}",
+                                             error.error.message ? error.error.message : error.error.name));
+    const Message reply(replied);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(1);
+    while (!response.arrived){
+        const int r = sd_bus_process(bus.get(), nullptr);
+        if (r < 0) throw fail("lost the screenshot portal", r);
+        if (r > 0) continue;    // Maybe more to do right away
+        const auto left = deadline - std::chrono::steady_clock::now();
+        if (left <= std::chrono::steady_clock::duration::zero()) throw std::runtime_error("the screenshot portal didn't answer");
+        if (const int w = sd_bus_wait(bus.get(), std::chrono::duration_cast<std::chrono::microseconds>(left).count()); w < 0 && w != -EINTR)
+            throw fail("lost the screenshot portal", w);
+    }
+    if (response.error < 0) throw fail("couldn't read the screenshot portal's answer", response.error);
+    if (response.code == 1) throw std::runtime_error("screenshots weren't allowed");
+    if (response.code != 0) throw std::runtime_error("the screenshot portal failed");
+
+    const std::string path = file_uri_path(response.uri);
+    if (path.empty()) throw std::runtime_error(std::format("the screenshot portal gave an unknown place: {}", response.uri));
+    std::vector<std::uint8_t> png;
     try {
-        return parse_ppm(run(args));
+        png = read_file(path);
+    } catch (...){
+        unlink(path.c_str());
+        throw;
+    }
+    unlink(path.c_str());
+    return parse_png(png);
+}
+
+#endif
+
+Image take_screenshot(){
+    std::string grim_error;
+    try {
+        return grim_screenshot();
+    } catch (const std::runtime_error& e){
+        grim_error = e.what();
+    }
+#ifdef HAVE_SD_BUS
+    try {
+        return portal_screenshot();
     } catch (const std::runtime_error& e){
         throw std::runtime_error(std::format(
-            "Couldn't take a screenshot: {}. Screenshots need grim, on a wlroots desktop like Hyprland or Sway.",
-            e.what()));
+            "Couldn't take a screenshot: {}, and {}. Screenshots need the desktop's screenshot portal "
+            "(xdg-desktop-portal), or grim on a wlroots desktop like Hyprland or Sway.",
+            grim_error, e.what()));
     }
+#else
+    throw std::runtime_error(std::format(
+        "Couldn't take a screenshot: {}. This build has no screenshot portal (it was built without libsystemd), "
+        "so screenshots need grim, on a wlroots desktop like Hyprland or Sway.",
+        grim_error));
+#endif
 }
 
 #endif
