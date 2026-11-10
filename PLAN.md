@@ -517,5 +517,17 @@ Still open:
   large-v3-turbo-q5_0, which picks kanji far better than small, went from
   31-35 s to 10-13 s for a 4 s line, and from 32 s to 17-20 s for a 10 s
   one, with the same text. A window cut closer to the clip breaks the
-  output. Measured with espeak's voice, so still to check on real anime
-  lines; and turbo is still slow on this CPU.
+  output.
+
+  **Checked on 50 real anime lines** (docs/transcription-tests.md). On an
+  i3-12100F, with the app's window:
+  - large-v3-turbo-q5_0 gets 8% of the sounds wrong, in 4.4 s a line
+  - small gets 8.8% wrong, in 1 s
+  - small to large-v3 are all within 6–9%; tiny and base are much worse
+  - the shorter window costs 1–3 points against the full 30 s
+
+  That still leaves the default open: small is nearly as accurate and
+  four times faster. The tests also found that whisper.cpp's flash
+  attention breaks the shorter window, so it's off now (see
+  `Transcriber::load`). Not yet checked on a weak laptop, or on games,
+  streams and YouTube.
