@@ -47,7 +47,7 @@ static void log_warnings(ggml_log_level level, const char* text, void*){
 // the time, in proportion to the window: a 4-second line took 31-35 s
 // with large-v3-turbo-q5_0 on an i7-8565U, and 10-13 s like this, with the
 // same text. A window cut any closer to the clip makes it write nonsense
-// ("empl but").
+// ("empl but"). It only works with flash attention off: see load().
 static int audio_context(whisper_context* ctx, size_t samples){
     constexpr size_t SAMPLES_PER_FRAME = Transcriber::SAMPLE_RATE / 50;
     constexpr int SLACK = 256;      // About 5 seconds
@@ -90,7 +90,17 @@ void Transcriber::load(const WhisperModel& new_model){
     if (!in) throw std::runtime_error(std::format("Couldn't open the {} model", new_model.id));
 
     whisper_model_loader loader{&in, read_model, model_eof, close_model};
-    ctx.reset(whisper_init_with_params(&loader, whisper_context_default_params()));
+    whisper_context_params params = whisper_context_default_params();
+    // Flash attention is on by default, and breaks audio_context()'s
+    // shorter window. With it, whisper.cpp keeps the encoder's output in
+    // blocks of 256 frames, and the decoder reads the whole last block,
+    // past the end of the window: frames this transcription didn't write,
+    // still holding the last one's. A clip over 5.12 s whose window ended
+    // inside a block could then come out as nonsense in several languages,
+    // depending on what was transcribed before it. Without flash attention
+    // the decoder reads exactly the window. On the CPU it's no slower.
+    params.flash_attn = false;
+    ctx.reset(whisper_init_with_params(&loader, params));
     // It was checked against its SHA-1 when downloaded, so it's most
     // likely run out of memory, or the file was changed since
     if (!ctx) throw std::runtime_error(std::format("Couldn't load the {} model", new_model.id));
