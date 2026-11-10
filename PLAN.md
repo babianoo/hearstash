@@ -519,15 +519,18 @@ Still open:
   one, with the same text. A window cut closer to the clip breaks the
   output.
 
-  **Checked on 50 real anime lines** (docs/transcription-tests.md). On an
-  i3-12100F, with the app's window:
-  - large-v3-turbo-q5_0 gets 8% of the sounds wrong, in 4.4 s a line
-  - small gets 8.8% wrong, in 1 s
-  - small to large-v3 are all within 6–9%; tiny and base are much worse
-  - the shorter window costs 1–3 points against the full 30 s
+  **Checked on real anime lines** (docs/transcription-tests.md): 50 from
+  a loud comedy, 49 from a calmer drama. On an i3-12100F, with the app's
+  window:
+  - large-v3-turbo-q5_0 gets 8% of the sounds wrong on the comedy and
+    3.5% on the drama, in 4.4 s a line
+  - small gets 8.8% and 6.2% wrong, in 1 s: it misses the drama's harder
+    words (拒む, 観念, 家賃), the ones a learner looks up
+  - tiny and base are much worse
+  - the shorter window costs 0–3 points against the full 30 s
 
-  That still leaves the default open: small is nearly as accurate and
-  four times faster. The tests also found that whisper.cpp's flash
+  So large-v3-turbo-q5_0 stays the default, with small for slow
+  computers. The tests also found that whisper.cpp's flash
   attention breaks the shorter window, so it's off now (see
   `Transcriber::load`). Not yet checked on a weak laptop, or on games,
   streams and YouTube.
