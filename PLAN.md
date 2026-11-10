@@ -520,14 +520,18 @@ Still open:
   output.
 
   **Checked on real anime lines** (docs/transcription-tests.md): 50 from
-  a loud comedy, 49 from a calmer drama. On an i3-12100F, with the app's
-  window:
+  a loud comedy, 49 from a calmer drama, 48 from an action movie. On an
+  i3-12100F, with the app's window:
   - large-v3-turbo-q5_0 gets 8% of the sounds wrong on the comedy and
     3.5% on the drama, in 4.4 s a line
   - small gets 8.8% and 6.2% wrong, in 1 s: it misses the drama's harder
     words (拒む, 観念, 家賃), the ones a learner looks up
   - tiny and base are much worse
-  - the shorter window costs 0–3 points against the full 30 s
+  - the shorter window costs 0–3 points against the full 30 s, except
+    under loud music and effects: there the default model gets 31.7% of
+    the sounds wrong, and 23.2% with the full window (3 s on a GTX
+    1050 Ti). Worth a "try again" with the full window, or using it
+    whenever there's a GPU
 
   So large-v3-turbo-q5_0 stays the default, with small for slow
   computers. The tests also found that whisper.cpp's flash

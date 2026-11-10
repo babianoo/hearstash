@@ -2,7 +2,7 @@
 
 The **50 audio tests** from the startup roadmap (Phase 1: "run the prototype on 50 short clips … record how many sentences are transcribed correctly per model size"): how accurate and fast whisper is on real anime lines, per model, on the CPU and a GPU. The same write-up is in the entrepreneurship repo, for the course.
 
-Two shows were tested: a loud comedy with a lot of shouting, and a calmer drama with harder words.
+Three were tested: a loud comedy with a lot of shouting, a calmer drama with harder words, and the action half of a movie, with lines under loud music, sirens and explosions.
 
 ## Short answer
 - **Accurate enough? Yes.** With the app's default model:
@@ -10,6 +10,7 @@ Two shows were tested: a loud comedy with a lot of shouting, and a calmer drama 
   - **the calmer show:** 40 of 49, with 3.5% wrong.
 - **Fast enough? On a desktop CPU, yes.** The app's default model takes a median of **4.4 s** for a 4.7 s line on our i3-12100F.
 - **The *small* model is 4 times faster (1 s) but not always as good.** It kept up on the comedy (8.8% wrong), but fell behind on the calmer show (6.2% against 3.5%), missing exactly the harder words a learner looks up. It's the fallback for weak laptops, not the default.
+- **Loud action is the weak spot.** In the movie's action scenes, lines under loud music or effects get **20–33% of the sounds wrong** with any model, against 4–6% for its quiet lines. Whisper's full 30-second window helps most there (31.7% → 23.2% with the default model).
 - **A GPU makes it about 5 times faster**, even a 2016 one: **0.9 s** a line with the default model, at the same accuracy.
 - **The tests found a bug in the app**, and it's fixed now. A line over 5 s could come out as nonsense in several languages, depending on what was transcribed before it. See [The bug the tests found](#the-bug-the-tests-found).
 
@@ -36,7 +37,15 @@ Two shows were tested: a loud comedy with a lot of shouting, and a calmer drama 
   - 2 lines of only eating sounds, taken out by hand
 - **Padding.** A TV caption stays up until the next one, so captions touch. A clip gets the 0.25 s of padding only on a side where no other caption is that close. Spot checks showed no words cut off at the start or end.
 
-### Both shows
+### The third: an action movie
+- **Clips.** 48 lines from *Chainsaw Man – The Movie: Reze Arc*, from 50:20, where the action starts, to the end. 50 were picked at random by the same script, from lines of 1.5 to 10 s (2.0 to 9.2 s with padding), and 2 were taken out after listening (below).
+- **Reference text.** The Japanese track of a fansub (Haruhana), shifted 1 s earlier to fit the video. The shift was checked in mpv, and against the video's own English subtitles: it's 0.7 to 1.0 s through the movie.
+- **Left out:** lines too close to the insert songs, which whisper would write down too, and a second speaker shown at the same time.
+- **Sorted by ear.** Saba listened to every clip and marked 19 as **loud**: really loud music, sirens, fire, waves, a chainsaw, speech from far away, screaming, a drum roll. The other 29 are **quiet**. 2 were taken out:
+  - clip 15: the clip has only the name コベニ, not the subtitle's line
+  - clip 29: only an exclamation and sound effects
+
+### All three
 - **Same settings as the app.** A small test program calls whisper.cpp with the exact settings from `src/core/transcriber.cpp`:
   - Japanese, greedy decoding, no context from the previous clip, non-speech tokens suppressed
   - flash attention off (see [the bug](#the-bug-the-tests-found))
@@ -109,6 +118,41 @@ All 49 clips. The models that fit on the GPU were run there: accuracy is the sam
   These are the words a learner looks up. Both turbo models and large-v3 got all five; medium missed two (拒む and 家賃).
 - **The shortened window costs nothing here.** The app's window matches the full one, or beats it.
 - **large-v3 is a little better again** (3.1%), at 1.5 times the default model's CPU time.
+
+## Results: the action movie
+48 clips. The models that fit on the GPU were run there; large-v3 ran on the CPU, as did the default model for its CPU time. "Loud" and "quiet" are the reading errors of the 19 and 29 clips Saba marked.
+
+| Model | Window | Correct | Close | Reading errors | Loud | Quiet | Median time |
+|---|---|---|---|---|---|---|---|
+| tiny | app | 4 | 8 | 38.7% | 64.8% | 22.4% | 0.1 s (GPU) |
+| base | app | 8 | 16 | 30.9% | 56.6% | 14.9% | 0.1 s (GPU) |
+| small | app | 15 | 25 | 18.2% | 36.4% | 6.8% | 0.4 s (GPU) |
+| small | full | 11 | 23 | 17.0% | 33.1% | 7.0% | 1.0 s (GPU) |
+| medium | app | 19 | 26 | 14.7% | 29.0% | 5.7% | 1.2 s (GPU) |
+| large-v3-turbo | app | 20 | 28 | 14.9% | 29.9% | 5.5% | 1.6 s (GPU) |
+| **large-v3-turbo-q5_0** (app default) | app | 21 | 29 | 15.6% | 31.7% | 5.5% | **0.9 s** (GPU), 4.4 s (CPU) |
+| large-v3-turbo-q5_0 | full | 21 | 30 | 11.7% | 23.2% | 4.6% | 3.0 s (GPU) |
+| large-v3 | app | 20 | 28 | 13.2% | 27.6% | 4.2% | 6.0 s (CPU) |
+| large-v3 | full | 21 | 29 | **10.3%** | **19.9%** | 4.2% | 20.1 s (CPU) |
+
+### What the table says
+- **Quiet lines are as good as on the calmer show:** 4 to 6% of sounds wrong from medium up. Quiet lines **without a name** are 1.9% wrong.
+- **Loud lines are where it breaks down:** a fifth to a third of the sounds wrong, and at best 7 of the 19 right or close. E.g. 美女 ("beautiful woman") under the music came out as 二女 or 以上.
+- **Here the window matters more than the model.** With the full window the default model goes from 31.7% to 23.2% on loud lines, and large-v3 from 27.6% to 19.9%. A bigger model on the same window saves only about 4 points. On the two TV shows the full window made little difference.
+- **The full window is cheap on a GPU** (3.0 s with the default model), and too slow on a CPU (large-v3: 20 s a line).
+
+### Names
+The names are written in katakana, the way they sound, so whisper only has to hear them, not guess the kanji. How it did, with the default model and large-v3:
+
+| Name | Written as |
+|---|---|
+| ビーム (Beam) | **Mostly right**: an ordinary word. Once Bめん, with the app's window |
+| チェンソー様 ("Mr. Chainsaw") | **Never right**: シンサン様, シェンとお玉, 剣とお玉, 神様様, イエス様. It's the anime's own way of saying チェーンソー, so whisper has nothing to match it to. |
+| レゼ (Reze) | Right once in four: エディ, レーブ, レーゼ, レイティ, なぜ |
+| デンジ (Denji) | レンジ ("cooker"), every time |
+| パワー (Power) | ハラー: a shouted パパパパワー！ over a drum roll, so not a fair test |
+
+On quiet lines, the 5 with a name are 12 to 18% wrong, against 1.9% for the 24 without. A bigger model doesn't help with names.
 
 ## The bug the tests found
 The first run gave much worse results for the app's window, and they changed with the order of the clips. Clip 14 came out right on its own, and as nonsense right after clip 08:
@@ -213,32 +257,37 @@ The same 50 clips on a **GTX 1050 Ti** (2016, 4 GB), through whisper.cpp's Vulka
 - **Yes.** With the default model:
   - **the comedy:** 35 of 50 lines are right or nearly right (8% of sounds wrong). With large-v3 it's 38 of 50 (6%).
   - **the calmer show:** 40 of 49 (3.5%). With large-v3 it's 41 of 49 (3%).
-- **What's wrong is mostly names, shouted gag lines and a few rare words.** The learner sees the text next to the clip they just heard, and can replay it.
+  - **the action movie:** 29 of 48 (15.6%): quiet lines 5.5%, loud ones 31.7%.
+- **What's wrong is mostly names, shouted gag lines, a few rare words, and anything under loud music or effects.** The learner sees the text next to the clip they just heard, and can replay it.
 
 ### How well does it work with different types of audio? Games?
-- **Only anime was tested,** but two very different shows. Both have music and sound effects under a lot of the lines. The clips weren't sorted by how loud the music is, so this test can't say how much music hurts.
+- **Only anime was tested,** but three very different kinds: a loud comedy, a calm drama and an action movie. Both have music and sound effects under a lot of the lines. The clips weren't sorted by how loud the music is, so this test can't say how much music hurts.
 - **Calm talking is easy; shouting, stammering and very short exclamations are the weak spot.** Errors on the calm show are about half those on the loud comedy.
 - **Harder words need a bigger model.** small did nearly as well as the default on the comedy's casual talk, but clearly worse on the calmer show's vocabulary.
+- **Loud music and effects are the hardest:** 20 to 33% of the sounds wrong, whatever the model. The full window helps most, a bigger model a little.
+- **Made-up names are often wrong** (チェンソー様, デンジ), even in katakana. Names that are ordinary words, like ビーム, come out right.
 - **Games, streams and YouTube aren't tested yet.** Games are likely close to anime (voice actors, music), streams harder (worse microphones, talking over each other).
 
 ### Local or on our servers? What would each cost?
 - **Local:** costs us nothing per use, and it's accurate and fast enough on a normal desktop.
-- **Server:** the most a server would add is large-v3 with the full window. On the comedy that's **about 3 points better** than the app's default model (5.3% vs 8.0% of sounds wrong). On the calmer show it's under 1 point (2.7% vs 3.5%). The startup's licensing plan's subscription only works if local isn't good enough for many users. For accuracy, these results say it is good enough. A server would mostly help **people with weak laptops**, for speed.
+- **Server:** the most a server would add is large-v3 with the full window. On the comedy that's **about 3 points better** than the app's default model (5.3% vs 8.0% of sounds wrong). On the calmer show it's under 1 point (2.7% vs 3.5%). Under loud action it's the most: 19.9% against 31.7% for the default model, though the default model with the full window on a GPU gets most of that (23.2%). The startup's licensing plan's subscription only works if local isn't good enough for many users. For accuracy, these results say it is good enough. A server would mostly help **people with weak laptops**, for speed.
 - **Server cost:** one 2016 GPU handles roughly 4,000 lines an hour with the default model. A current server GPU would do many more. The cost per line is the GPU's hourly price divided by that, which is for the money side (Giorgi) to work out.
 
 ## What to change
 - [x] **Fix the flash attention bug** (done: flash attention off in `transcriber.cpp`).
 - [ ] **Keep large-v3-turbo-q5_0 as the default, and offer small for slow computers.** small is 4 times faster and kept up on the comedy, but missed the harder words on the calmer show. The settings could say so.
+- [ ] **Offer a second, slower try with the full window**, for when a line looks wrong. Under loud action it's about a quarter fewer errors. Or use the full window by default when there's a GPU, where it takes 3 s.
 - [ ] **Test the other audio types:** a game, a stream and a YouTube video.
 - [ ] **Test on a weak laptop.**
-- [x] **Consider a GPU build** (Vulkan). It needs a fallback to the CPU when the model doesn't fit in video memory. (Done: the app builds with Vulkan when it can, checks the free video memory before loading, and falls back to the CPU. Setting: Speech-to-Text > Transcribe on the GPU.)
+- [ ] **Consider a GPU build** (Vulkan). It needs a fallback to the CPU when the model doesn't fit in video memory.
 - [ ] **Report the bug to whisper.cpp:** the flash-attention decoder reads past the end of a shortened window.
 
 ## Limits of this test
-- **Two shows, one kind of audio.** Anime only: no games, streams or YouTube.
-- **The reference texts aren't word for word.** The first show's is a fansub's subtitles, the second's TV captions. Both may leave out short sounds (あ, え) or tidy up what was said.
+- **Three shows, one kind of audio.** Anime only: no games, streams or YouTube.
+- **The reference texts aren't word for word.** The first show's and the movie's are fansubs' subtitles, the second show's TV captions. Both may leave out short sounds (あ, え) or tidy up what was said.
 - **The second show's captions were timed by hand to another recording,** and shifted to fit. Spot checks found no words cut off, but a line could start or end a little early or late.
 - **Only 2 episodes of the second show**, so few voices and scenes.
+- **Loud and quiet were decided by ear,** by one person, and only for the movie.
 - **Lines with someone else talking right before or after were left out**, so overlapping speech isn't tested.
 - **Same-sounding wrong words count as right** in the reading score. The text score is stricter.
 - **Speed was measured on one desktop.**
@@ -251,6 +300,7 @@ The scripts and clips are in the Hearstash repo under `testing/audio-tests/`. Th
 |---|---|
 | `select_clips.py` | Picks the lines and cuts the clips into `clips/`, with the reference text in `truth.json`. The second show's are in `sets/apothecary/` |
 | `sync_check.py` | Checks how far subtitles are shifted from a video, per 4-minute section |
+| `sets/reze/labels.json` | The movie's clips marked loud by ear, and the 2 taken out |
 | `run_whisper.cpp` | The test program, with the app's whisper settings. Built against the app's whisper.cpp for the CPU, and against `build-vulkan/` for the GPU |
 | `run_all.sh` | Runs each model on all the clips, into `results/` |
 | `score.py` | Scores the results into `scores.json` |
