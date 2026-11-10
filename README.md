@@ -48,6 +48,14 @@ Installed on the system:
   Wayland
 - Optional, on Linux: libsystemd (its sd-bus), for screenshots on KDE,
   GNOME and X11. Without it, screenshots only work with grim
+- Optional: Vulkan, to run whisper on the GPU (NVIDIA, AMD or Intel),
+  about 5 times faster. Building it takes the Vulkan headers and loader,
+  `glslc` and SPIRV-Headers (Arch: `vulkan-headers`, `vulkan-icd-loader`,
+  `shaderc`, `spirv-headers`). It's used when they're all found; pass
+  `-DHEARSTASH_GPU=OFF` to build for the CPU only, or `ON` to fail without
+  them. The app then needs the Vulkan loader to start, which GPU drivers
+  install. With no GPU, or not enough free video memory for the model,
+  it transcribes on the CPU
 - Optional: [onnxruntime](https://onnxruntime.ai/), to read text on the
   screen (Arch: `onnxruntime-cpu`; elsewhere Microsoft's prebuilt package,
   passed to CMake as `-DONNXRUNTIME_ROOT=<its folder>`). Without it, the
@@ -117,10 +125,11 @@ ctest --test-dir build
 
 Everything is in **Settings**:
 
-- **Speech-to-Text**: download a whisper model and choose it. `small` is a good
-  start; `large-v3-turbo-q5_0` picks kanji much better but is slower.
-  Downloads are checked against their SHA-1. You can also choose the
-  microphone here.
+- **Speech-to-Text**: download a whisper model and choose it. `small` is a
+  good start; `large-v3-turbo-q5_0` picks kanji much better but is slower.
+  Downloads are checked against their SHA-1. It runs on the GPU unless you
+  untick **Transcribe on the GPU**, e.g. to leave a game all the video
+  memory. You can also choose the microphone here.
 - **Buffer**: turn the rolling buffer on or off, set how many seconds it
   keeps (and how much of the end is selected when a capture opens), and
   set the capture shortcut.

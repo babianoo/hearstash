@@ -111,6 +111,8 @@ private:
     // item i saves, "" for Default.
     Fl_Choice* mic_choice = nullptr;
     std::vector<std::string> mic_names;
+    // Also there: whether whisper runs on the GPU
+    Fl_Check_Button* gpu_check = nullptr;
     // On the Buffer page. The numbers are applied like capacity_input's.
     Fl_Check_Button* buffer_enabled = nullptr;
     ClipboardInput* buffer_seconds_input = nullptr;
@@ -150,6 +152,7 @@ private:
     static void on_model_chosen(Fl_Widget* w, void* data);
     static void on_model_action(Fl_Widget* w, void* data);
     static void on_mic_chosen(Fl_Widget* w, void* data);
+    static void on_gpu_toggled(Fl_Widget* w, void* data);
     static void on_buffer_enabled(Fl_Widget* w, void* data);
     static void on_buffer_seconds(Fl_Widget* w, void* data);
     static void on_shortcut(Fl_Widget* w, void* data);

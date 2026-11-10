@@ -21,6 +21,7 @@
 #include "core/hearstash_note_type.h"
 #include "core/recorder.h"
 #include "core/settings.h"
+#include "core/transcriber.h"
 #include "core/whisper_models.h"
 #include "ui/capturer.h"
 #include "ui/category_button.h"
@@ -377,6 +378,27 @@ void SettingsWindow::add_speech_settings(int x, int w){
         folder->labelcolor(DIM);
     } catch (const std::exception&){}
     y += 20 + 14;
+
+    // Whether whisper runs on the GPU, and which one. Without one, e.g. in
+    // a build without GPU support, it can't be turned on.
+    const std::string gpu = Transcriber::gpu_name();
+    gpu_check = new Fl_Check_Button(left, y, right - left, 20);
+    const std::string gpu_label = gpu.empty() ? std::string("Transcribe on the GPU")
+                                              : std::format("Transcribe on the GPU ({})", gpu);
+    gpu_check->copy_label(gpu_label.c_str());
+    gpu_check->value(!gpu.empty() && settings.get().speech.use_gpu);
+    gpu_check->clear_visible_focus();
+    gpu_check->callback(on_gpu_toggled, this);
+    if (gpu.empty()) gpu_check->deactivate();
+    y += gpu_check->h() + 2;
+
+    Fl_Box* gpu_note = new Fl_Box(left, y, right - left, 20,
+                                  gpu.empty() ? "No GPU found, so it runs on the CPU."
+                                              : "Much faster, but takes video memory while the model is loaded.");
+    gpu_note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    gpu_note->labelsize(12);
+    gpu_note->labelcolor(DIM);
+    y += gpu_note->h() + 14;
 
     // Microphone: a label, then a dropdown as wide as the rows. Filled by
     // refresh_microphones(), since what's plugged in changes.
@@ -742,6 +764,13 @@ void SettingsWindow::on_buffer_enabled(Fl_Widget*, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
     const bool enabled = self->buffer_enabled->value();
     self->settings.update([enabled](Settings& s){ s.buffer.enabled = enabled; });
+}
+
+void SettingsWindow::on_gpu_toggled(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const bool use_gpu = self->gpu_check->value();
+    // The model is loaded again for the next transcription
+    self->settings.update([use_gpu](Settings& s){ s.speech.use_gpu = use_gpu; });
 }
 
 void SettingsWindow::on_shortcut(Fl_Widget*, void* data){

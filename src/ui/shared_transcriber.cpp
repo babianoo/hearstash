@@ -41,15 +41,15 @@ void SharedTranscriber::release(){
     if (--holders == 0) Fl::add_timeout(UNLOAD_AFTER, on_unload_timeout, this);
 }
 
-std::string SharedTranscriber::transcribe(const WhisperModel& model, std::span<const float> samples,
+std::string SharedTranscriber::transcribe(const WhisperModel& model, bool gpu, std::span<const float> samples,
                                           const std::string& language, std::stop_token stop){
     Turn turn(*this, stop);
-    return transcriber.transcribe(model, samples, language, stop);
+    return transcriber.transcribe(model, gpu, samples, language, stop);
 }
 
-void SharedTranscriber::prepare(const WhisperModel& model, std::stop_token stop){
+void SharedTranscriber::prepare(const WhisperModel& model, bool gpu, std::stop_token stop){
     Turn turn(*this, stop);
-    transcriber.prepare(model);
+    transcriber.prepare(model, gpu);
 }
 
 void SharedTranscriber::on_unload_timeout(void* data){

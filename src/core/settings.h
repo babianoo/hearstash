@@ -14,7 +14,7 @@
 //    "buffer": {"seconds": 30}, "general": {"scroll_speed": 50},
 //    "history": {"capacity": 100},
 //    "screen_text": {"areas": {"fate.exe": {"x": 0.1, ...}}},
-//    "speech": {"whisper_model": "small"}, "version": 1}
+//    "speech": {"whisper_model": "small", "use_gpu": true}, "version": 1}
 //
 // The field names are the JSON keys, so renaming one changes the file
 // format. A field's default is what it gets when the file doesn't have it.
@@ -55,6 +55,10 @@ struct SpeechSettings {
     // gives it. Empty for the system's default one, which is also used
     // when this one isn't plugged in.
     std::string input_device;
+    // Whether whisper runs on the GPU, when there's one and the model fits
+    // in its memory. Much faster, but takes video memory from what else
+    // runs, e.g. the game, while the model is loaded.
+    bool use_gpu = true;
 };
 
 // The Buffer category: the rolling buffer of what the computer plays

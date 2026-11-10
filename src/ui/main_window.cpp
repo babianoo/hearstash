@@ -147,9 +147,10 @@ void MainWindow::start_recording(){
     // previous one has already ended: the state was Idle again only after
     // its result came in. model points into WHISPER_MODELS, which lives
     // for the whole program.
-    transcription_thread = std::jthread([this, model](std::stop_token stop){
+    const bool gpu = settings.get().speech.use_gpu;
+    transcription_thread = std::jthread([this, model, gpu](std::stop_token stop){
         try {
-            transcriber.prepare(*model, stop);
+            transcriber.prepare(*model, gpu, stop);
         } catch (const std::exception&){
             // Reported once there's a recording: transcribe() tries again.
             // Stopped, the wait below returns at once.
@@ -168,7 +169,7 @@ void MainWindow::start_recording(){
         auto* result = new Transcription{.win = this, .text = {}};
         try {
             // Nothing recorded is nothing said, even if the model failed
-            if (!samples.empty()) result->text = transcriber.transcribe(*model, samples, "ja", stop);
+            if (!samples.empty()) result->text = transcriber.transcribe(*model, gpu, samples, "ja", stop);
         } catch (const TranscriptionCancelled&){
             delete result;
             return;

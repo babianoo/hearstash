@@ -1,13 +1,17 @@
 #include "core/transcriber.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <mutex>
 #include <stdexcept>
+#include <system_error>
 
-// whisper.cpp
+// whisper.cpp, and its ggml for the GPU
+#include <ggml-backend.h>
 #include <whisper.h>
 
 static_assert(Transcriber::SAMPLE_RATE == WHISPER_SAMPLE_RATE);
@@ -27,7 +31,7 @@ static bool model_eof(void* context){
     return static_cast<std::ifstream*>(context)->eof();
 }
 
-// The ifstream closes itself when load() returns
+// The ifstream closes itself when init() returns
 static void close_model(void*){}
 
 // whisper.cpp and ggml log through this instead of straight to stderr.
@@ -79,18 +83,64 @@ void Transcriber::unload(){
     model = nullptr;
 }
 
-void Transcriber::load(const WhisperModel& new_model){
-    // Freed first, so two models are never in memory at once
-    unload();
+// The GPU whisper.cpp picks when it's asked for one: the first that ggml
+// has a backend for, here Vulkan. nullptr if there's none. Found once,
+// which starts Vulkan and takes a moment.
+static ggml_backend_dev_t find_gpu(){
+    static const ggml_backend_dev_t gpu = []() -> ggml_backend_dev_t {
+        for (size_t i = 0; i < ggml_backend_dev_count(); ++i){
+            ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+            const enum ggml_backend_dev_type type = ggml_backend_dev_type(dev);
+            if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU) return dev;
+        }
+        return nullptr;
+    }();
+    return gpu;
+}
 
-    if (!is_installed(new_model))
-        throw std::runtime_error(std::format("The {} model isn't downloaded", new_model.id));
+std::string Transcriber::gpu_name(){
+    ggml_backend_dev_t gpu = find_gpu();
+    return gpu ? ggml_backend_dev_description(gpu) : "";
+}
 
-    std::ifstream in(model_path(new_model), std::ios::binary);
-    if (!in) throw std::runtime_error(std::format("Couldn't open the {} model", new_model.id));
+// About how much video memory a model of size bytes takes in all: its
+// weights take about its file size, then Vulkan's own memory, about 450
+// MiB, and whisper's caches and the memory it computes in, which grow
+// with the model. Measured on a GTX 1050 Ti, beyond the file size: 540
+// MiB with tiny, 672 with small, 676 with large-v3-turbo-q5_0, 691 with
+// large-v3-turbo and 932 with medium.
+static uintmax_t gpu_memory_needed(uintmax_t size){
+    return size + (600ull << 20) + size / 4;
+}
+
+// Whether the model at path should fit in what's free of gpu's memory.
+// It has to be checked first: when the weights don't fit, whisper.cpp
+// ignores the failed allocation and crashes loading them. Its caches and
+// working memory, allocated after, fail cleanly.
+static bool fits(ggml_backend_dev_t gpu, const std::filesystem::path& path, const WhisperModel& model){
+    std::error_code error;
+    const uintmax_t size = std::filesystem::file_size(path, error);
+    if (error) return false;
+    size_t free = 0, total = 0;
+    ggml_backend_dev_memory(gpu, &free, &total);
+    const uintmax_t needed = gpu_memory_needed(size);
+    if (needed <= free) return true;
+    std::fprintf(stderr, "The %s model needs about %ju MiB of video memory, and %ju MiB is free: "
+                 "transcribing on the CPU\n", std::string(model.id).c_str(), needed >> 20,
+                 static_cast<uintmax_t>(free) >> 20);
+    return false;
+}
+
+// The model at path in a new context, on the GPU or the CPU. nullptr if
+// whisper.cpp couldn't load it.
+static whisper_context* init(const std::filesystem::path& path, const WhisperModel& model, bool gpu){
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error(std::format("Couldn't open the {} model", model.id));
 
     whisper_model_loader loader{&in, read_model, model_eof, close_model};
     whisper_context_params params = whisper_context_default_params();
+    // On by default. The CPU is used anyway when there's no GPU.
+    params.use_gpu = gpu;
     // Flash attention is on by default, and breaks audio_context()'s
     // shorter window. With it, whisper.cpp keeps the encoder's output in
     // blocks of 256 frames, and the decoder reads the whole last block,
@@ -98,23 +148,45 @@ void Transcriber::load(const WhisperModel& new_model){
     // still holding the last one's. A clip over 5.12 s whose window ended
     // inside a block could then come out as nonsense in several languages,
     // depending on what was transcribed before it. Without flash attention
-    // the decoder reads exactly the window. On the CPU it's no slower.
+    // the decoder reads exactly the window. On the CPU it's no slower, and
+    // on the GPU only a little.
     params.flash_attn = false;
-    ctx.reset(whisper_init_with_params(&loader, params));
+    return whisper_init_with_params(&loader, params);
+}
+
+void Transcriber::load(const WhisperModel& new_model, bool gpu){
+    // Freed first, so two models are never in memory at once
+    unload();
+
+    if (!is_installed(new_model))
+        throw std::runtime_error(std::format("The {} model isn't downloaded", new_model.id));
+    const std::filesystem::path path = model_path(new_model);
+
+    ggml_backend_dev_t device = gpu ? find_gpu() : nullptr;
+    if (device && fits(device, path, new_model)){
+        ctx.reset(init(path, new_model, true));
+        // Most likely its caches didn't fit after all, e.g. a game took
+        // memory meanwhile. whisper.cpp has logged why.
+        if (!ctx) std::fprintf(stderr, "Couldn't load the %s model on the GPU: transcribing on the CPU\n",
+                               std::string(new_model.id).c_str());
+    }
+    gpu_used = ctx != nullptr;
+    if (!ctx) ctx.reset(init(path, new_model, false));
     // It was checked against its SHA-1 when downloaded, so it's most
     // likely run out of memory, or the file was changed since
     if (!ctx) throw std::runtime_error(std::format("Couldn't load the {} model", new_model.id));
     model = &new_model;
+    gpu_wanted = gpu;
 }
 
-void Transcriber::prepare(const WhisperModel& wanted){
-    if (model != &wanted) load(wanted);
+void Transcriber::prepare(const WhisperModel& wanted, bool gpu){
+    if (model != &wanted || gpu_wanted != gpu) load(wanted, gpu);
 }
 
-std::string Transcriber::transcribe(const WhisperModel& wanted, std::span<const float> samples,
+std::string Transcriber::transcribe(const WhisperModel& wanted, bool gpu, std::span<const float> samples,
                                     const std::string& language, std::stop_token stop){
     if (stop.stop_requested()) throw TranscriptionCancelled();
-    prepare(wanted);
+    prepare(wanted, gpu);
     // Loading has no way to stop partway, so it's checked again after
     if (stop.stop_requested()) throw TranscriptionCancelled();
     if (samples.empty()) return "";

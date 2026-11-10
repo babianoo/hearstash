@@ -72,6 +72,39 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build whisper.cpp and ggml as static libra
 # import library rather than libgomp.a, so even a -static build would
 # need libgomp-1.dll next to it.
 set(GGML_OPENMP OFF CACHE BOOL "Use OpenMP in ggml")
+# Vulkan, to run whisper on the GPU: NVIDIA, AMD and Intel alike. Building
+# it takes the Vulkan headers and loader, glslc (to compile ggml's
+# shaders) and SPIRV-Headers; Arch: vulkan-headers, vulkan-icd-loader,
+# shaderc, spirv-headers. HEARSTASH_GPU is AUTO (with Vulkan when those
+# are found), ON (fail without them) or OFF (CPU only). It sets ggml's own
+# GGML_VULKAN, which is overwritten.
+# With it, the app needs the Vulkan loader (libvulkan.so.1, vulkan-1.dll)
+# to start, which GPU drivers come with. Without a GPU that can take the
+# model, it transcribes on the CPU.
+set(HEARSTASH_GPU AUTO CACHE STRING "Run whisper on the GPU through Vulkan: AUTO, ON or OFF")
+set_property(CACHE HEARSTASH_GPU PROPERTY STRINGS AUTO ON OFF)
+set(VULKAN_BUILDABLE OFF)
+if(NOT HEARSTASH_GPU STREQUAL "OFF")
+    find_package(Vulkan QUIET COMPONENTS glslc)
+    find_package(SPIRV-Headers CONFIG QUIET)
+    if(Vulkan_FOUND AND Vulkan_glslc_FOUND AND SPIRV-Headers_FOUND)
+        set(VULKAN_BUILDABLE ON)
+    endif()
+endif()
+if(HEARSTASH_GPU STREQUAL "AUTO")
+    set(USE_VULKAN ${VULKAN_BUILDABLE})
+elseif(HEARSTASH_GPU)
+    if(NOT VULKAN_BUILDABLE)
+        message(FATAL_ERROR "HEARSTASH_GPU is ON, but the Vulkan headers and loader, glslc or SPIRV-Headers weren't found")
+    endif()
+    set(USE_VULKAN ON)
+else()
+    set(USE_VULKAN OFF)
+endif()
+if(NOT USE_VULKAN)
+    message(STATUS "Building without Vulkan: whisper will only run on the CPU")
+endif()
+set(GGML_VULKAN ${USE_VULKAN} CACHE BOOL "Set from HEARSTASH_GPU" FORCE)
 add_subdirectory(external/whisper.cpp EXCLUDE_FROM_ALL)
 
 # miniaudio, for recording from the microphone. It's one header, compiled

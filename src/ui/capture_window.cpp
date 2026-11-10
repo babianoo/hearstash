@@ -198,13 +198,14 @@ void CaptureWindow::prepare_model(){
     // Said when Enter is pressed: maybe they only want to listen
     if (!model || !is_installed(*model)) return;
 
+    const bool gpu = settings.get().speech.use_gpu;
     const unsigned id = next_job_id++;
     transcriber.hold();
     // model points into WHISPER_MODELS, which lives for the whole program
-    jobs.push_back({id, std::jthread([this, id, model](std::stop_token stop){
+    jobs.push_back({id, std::jthread([this, id, model, gpu](std::stop_token stop){
         auto* result = new JobResult{.win = this, .id = id};
         try {
-            transcriber.prepare(*model, stop);
+            transcriber.prepare(*model, gpu, stop);
         } catch (const TranscriptionCancelled&){
             result->cancelled = true;
         } catch (const std::exception& e){
@@ -239,13 +240,14 @@ void CaptureWindow::transcribe(){
     // A copy for the thread: a new capture replaces audio
     std::vector<float> clip(audio.begin() + static_cast<std::ptrdiff_t>(begin),
                             audio.begin() + static_cast<std::ptrdiff_t>(end));
+    const bool gpu = settings.get().speech.use_gpu;
     transcriber.hold();
     // Waits its turn if the model is still loading
-    jobs.push_back({id, std::jthread([this, id, model, clip = std::move(clip), clip_rate = rate](std::stop_token stop){
+    jobs.push_back({id, std::jthread([this, id, model, gpu, clip = std::move(clip), clip_rate = rate](std::stop_token stop){
         auto* result = new JobResult{.win = this, .id = id};
         try {
             const std::vector<float> samples = resample(clip, clip_rate, Transcriber::SAMPLE_RATE);
-            result->text = transcriber.transcribe(*model, samples, "ja", stop);
+            result->text = transcriber.transcribe(*model, gpu, samples, "ja", stop);
         } catch (const TranscriptionCancelled&){
             result->cancelled = true;
         } catch (const std::exception& e){

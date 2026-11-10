@@ -231,7 +231,7 @@ The same 50 clips on a **GTX 1050 Ti** (2016, 4 GB), through whisper.cpp's Vulka
 - [ ] **Keep large-v3-turbo-q5_0 as the default, and offer small for slow computers.** small is 4 times faster and kept up on the comedy, but missed the harder words on the calmer show. The settings could say so.
 - [ ] **Test the other audio types:** a game, a stream and a YouTube video.
 - [ ] **Test on a weak laptop.**
-- [ ] **Consider a GPU build** (Vulkan). It needs a fallback to the CPU when the model doesn't fit in video memory.
+- [x] **Consider a GPU build** (Vulkan). It needs a fallback to the CPU when the model doesn't fit in video memory. (Done: the app builds with Vulkan when it can, checks the free video memory before loading, and falls back to the CPU. Setting: Speech-to-Text > Transcribe on the GPU.)
 - [ ] **Report the bug to whisper.cpp:** the flash-attention decoder reads past the end of a shortened window.
 
 ## Limits of this test

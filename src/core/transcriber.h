@@ -21,7 +21,12 @@ public:
 
 // Turns recorded speech into text with a whisper model. The model is
 // loaded the first time it's needed and kept until unload(), since loading
-// takes seconds; a call with another model swaps it.
+// takes seconds; a call with another model, or another choice of GPU,
+// swaps it.
+//
+// With gpu, the model runs on the GPU when there's one (gpu_name()) and it
+// has the free memory for it, about 5 times faster than on the CPU.
+// Otherwise it runs on the CPU, until the model is loaded again.
 //
 // One thread at a time, and not the UI thread: loading and transcribing
 // both block for seconds.
@@ -43,24 +48,32 @@ public:
 
     // The text spoken in samples, trimmed; empty if there's none. language
     // is a code like "ja", or "auto" to detect it. Loads model first if
-    // it isn't the one loaded.
+    // it isn't the one loaded, or was loaded with another gpu.
     // Requesting stop on stop makes it throw TranscriptionCancelled, about
     // half a second later while transcribing (with base). Loading can't be
     // stopped partway, so then it throws once the model is loaded.
     // Throws std::runtime_error if model isn't installed, can't be loaded,
     // or whisper fails.
-    std::string transcribe(const WhisperModel& model, std::span<const float> samples,
+    std::string transcribe(const WhisperModel& model, bool gpu, std::span<const float> samples,
                            const std::string& language = "ja", std::stop_token stop = {});
 
-    // Loads model unless it's the one loaded, so transcribe() can start
-    // right away. Can't be stopped partway. Throws std::runtime_error like
-    // transcribe() does.
-    void prepare(const WhisperModel& model);
+    // Loads model unless it's the one loaded, with the same gpu, so
+    // transcribe() can start right away. Can't be stopped partway. Throws
+    // std::runtime_error like transcribe() does.
+    void prepare(const WhisperModel& model, bool gpu);
 
     // nullptr if none is
     const WhisperModel* loaded_model() const { return model; }
+    // Whether the loaded model runs on the GPU. False if none is loaded.
+    bool on_gpu() const { return ctx && gpu_used; }
     // Frees the model's memory; the next transcribe() loads it again
     void unload();
+
+    // The GPU a model would run on, as its driver names it, e.g. "NVIDIA
+    // GeForce GTX 1050 Ti". Empty if there's none, or the app was built
+    // without GPU support. Any thread; the first call takes a moment, to
+    // find the GPUs.
+    static std::string gpu_name();
 
 private:
     // whisper_free instead of delete. Defined in transcriber.cpp, which
@@ -73,7 +86,10 @@ private:
     // Which model ctx holds. Points into WHISPER_MODELS, which lives for
     // the whole program.
     const WhisperModel* model = nullptr;
+    // The gpu it was loaded with, and whether it got the GPU
+    bool gpu_wanted = false;
+    bool gpu_used = false;
 
     // Replaces what's loaded with model
-    void load(const WhisperModel& model);
+    void load(const WhisperModel& model, bool gpu);
 };

@@ -40,9 +40,9 @@ public:
     // Any thread, while held. Like Transcriber's, but first waits for any
     // other thread's turn to end. Requesting stop on stop while waiting
     // throws TranscriptionCancelled too.
-    std::string transcribe(const WhisperModel& model, std::span<const float> samples,
+    std::string transcribe(const WhisperModel& model, bool gpu, std::span<const float> samples,
                            const std::string& language, std::stop_token stop);
-    void prepare(const WhisperModel& model, std::stop_token stop);
+    void prepare(const WhisperModel& model, bool gpu, std::stop_token stop);
 
 private:
     Transcriber transcriber;
