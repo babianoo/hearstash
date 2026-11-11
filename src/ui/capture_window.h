@@ -55,7 +55,8 @@ public:
 
     // Shows audio, rate a second, in place of the capture there was, with
     // the last selection_seconds of it selected, and brings the window to
-    // the front. Cancels a transcription of the capture there was.
+    // the front. A window that's already open is refreshed where it is.
+    // Cancels a transcription of the capture there was.
     // screenshot is kept for the card; if it's empty, screenshot_error
     // says why.
     void open(std::vector<float> audio, int rate, int selection_seconds, Image screenshot,

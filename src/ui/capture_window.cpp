@@ -119,9 +119,10 @@ void CaptureWindow::open(std::vector<float> new_audio, int new_rate, int selecti
 
     prepare_model();
 
-    // Wayland doesn't let an app raise a window that's already shown, but
-    // a window that's shown anew comes up in front, with the focus
-    if (win.shown()) win.hide();
+    // A window that's already open is refreshed where it is, not hidden
+    // and shown anew, so it keeps its place on the screen. show() then
+    // only raises it. Wayland doesn't let an app do that: there it stays
+    // behind what covers it.
     win.show();
     // On Windows that isn't enough, e.g. over a fullscreen game
     bring_to_front(win);

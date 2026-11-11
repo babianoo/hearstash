@@ -112,7 +112,8 @@ void CardWindow::open(CardDraft new_draft){
     restore_crop();
     refresh_destination();
 
-    // Like the capture window: shown anew, it comes up in front on Wayland
+    // Wayland doesn't let an app raise a window that's already shown, but
+    // a window that's shown anew comes up in front, with the focus
     if (win.shown()) win.hide();
     win.show();
     word_input->take_focus();

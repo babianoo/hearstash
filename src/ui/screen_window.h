@@ -51,8 +51,9 @@ public:
     ScreenWindow& operator=(const ScreenWindow&) = delete;
 
     // Shows screenshot in place of the one there was, reads it, and brings
-    // the window to the front. app is the program that had the focus
-    // (focused_app()), for the part of the screen kept for it.
+    // the window to the front. A window that's already open is refreshed
+    // where it is. app is the program that had the focus (focused_app()),
+    // for the part of the screen kept for it.
     void open(Image screenshot, std::string app);
 
 private:

@@ -113,8 +113,8 @@ void ScreenWindow::open(Image new_screenshot, std::string new_app){
     refresh_area_info();
     read();
 
-    // Like the capture window: shown anew, it comes up in front on Wayland
-    if (win.shown()) win.hide();
+    // Like the capture window: one that's already open is refreshed where
+    // it is, and show() only raises it
     win.show();
     // On Windows that isn't enough, e.g. over a fullscreen game
     bring_to_front(win);
