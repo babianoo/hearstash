@@ -126,6 +126,22 @@ static std::string glossary(const std::string& meaning){
     return groups.empty() ? "" : GLOSSARY_OPEN + groups + GLOSSARY_CLOSE;
 }
 
+std::string card_glossary(std::string_view dictionary, std::string_view definitions, std::string_view styles){
+    if (definitions.empty()) return "";
+    std::string html = "<div style=\"text-align: left;\" class=\"yomitan-glossary\"><ol><li data-dictionary=\"";
+    html += escape(dictionary);
+    html += "\"><span>";
+    html += definitions;
+    html += "</span></li></ol>";
+    // Nothing in a stylesheet closes a tag, so one that does isn't one
+    if (!styles.empty() && styles.find("</") == std::string_view::npos){
+        html += "<style>";
+        html += styles;
+        html += "</style>";
+    }
+    return html + "</div>";
+}
+
 std::vector<std::pair<std::string, std::string>> format_card(const CardContent& card, const AnkiSettings& settings){
     std::vector<std::pair<std::string, std::string>> fields;
     for (size_t p = 0; p < CARD_PART_COUNT; ++p){
@@ -151,7 +167,8 @@ std::vector<std::pair<std::string, std::string>> format_card(const CardContent& 
         }
         append(html, head, "<br>");
 
-        const std::string gloss = here(CardPart::Meaning) ? glossary(card.meaning) : "";
+        const std::string gloss = !here(CardPart::Meaning) ? ""
+                                : card.glossary_html.empty() ? glossary(card.meaning) : card.glossary_html;
         if (!gloss.empty()){
             // After the word, the template's "{audio} {pitch-accents}<br>",
             // which has neither

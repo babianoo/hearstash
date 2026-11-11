@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-#include "core/jisho.h"
+#include "core/word_entry.h"
 
 // Only pointers to these are stored here, so the full headers are
 // included in lookup_panels.cpp instead.
@@ -18,7 +18,7 @@ struct TextSpan;
 
 // The bottom half of the capture windows: the text on the left, big, and
 // a panel on the right. Selecting part of the text with the mouse looks it
-// up on Jisho, in the panel; translate() shows the whole text's DeepL
+// up in the dictionary (look_up_word()), in the panel; translate() shows the whole text's DeepL
 // translation there instead, and so does auto_translate() for new text,
 // if the settings say so. The audio capture window's text is whisper's
 // transcript, the screen capture window's what was read on the screen.
@@ -55,7 +55,7 @@ public:
     void auto_translate(const Settings& settings);
 
     // A card's text: the sentence, and the word looked up last with what
-    // Jisho said of it
+    // the dictionary said of it
     void fill(CardDraft& draft) const;
 
     // Called when text() changes
@@ -66,8 +66,10 @@ private:
     struct LookupResult {
         LookupPanels* panels;
         unsigned id;
+        // What was selected, and the part of it the entries are for
         std::string keyword;
-        std::vector<JishoEntry> entries{};
+        std::string matched{};
+        std::vector<WordEntry> entries{};
         std::string error{};    // Non-empty if it failed
     };
     // What a translation thread hands back to the UI thread
@@ -88,7 +90,7 @@ private:
 
     std::string text_;
     // The first entry of the lookup shown, if any, and what was looked up
-    std::optional<JishoEntry> entry;
+    std::optional<WordEntry> entry;
     std::string keyword;
     // Bumped on every lookup and translation, which share the panel, and
     // when the text changes. Only the latest one's result is shown.

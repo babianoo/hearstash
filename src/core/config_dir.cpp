@@ -3,6 +3,14 @@
 #include <cstdlib>
 #include <format>
 #include <stdexcept>
+#include <string>
+#include <system_error>
+
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 // The same on every platform
 static constexpr const char* APP_DIR = "Hearstash";
@@ -71,5 +79,21 @@ std::filesystem::path data_dir(){
     return app_dir_in(L"LOCALAPPDATA");
 #else
     return app_dir_in("XDG_DATA_HOME", ".local/share");
+#endif
+}
+
+std::filesystem::path program_dir(){
+#ifdef _WIN32
+    // Long enough for any path Windows gives without the \\?\ prefix
+    std::wstring path(32768, L'\0');
+    const DWORD size = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+    if (size == 0 || size >= path.size()) throw std::runtime_error("Couldn't find where the program is");
+    path.resize(size);
+    return std::filesystem::path(path).parent_path();
+#else
+    std::error_code error;
+    const std::filesystem::path program = std::filesystem::read_symlink("/proc/self/exe", error);
+    if (error) throw std::runtime_error("Couldn't find where the program is");
+    return program.parent_path();
 #endif
 }

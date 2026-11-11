@@ -6,7 +6,7 @@
 
 #include "ui/theme.h"
 
-// Looks of the parts of a Jisho result
+// Looks of the parts of a result
 static const TextStyle WORD{FL_HELVETICA_BOLD, 24};
 static const TextStyle READING{FL_HELVETICA, 16, DIM};
 static const TextStyle COMMON{FL_HELVETICA_BOLD, 12, fl_rgb_color(40, 120, 40)};
@@ -29,12 +29,12 @@ static std::string join(const std::vector<std::string>& parts, std::string_view 
 //   兄弟  きょうだい  common word          (big bold word, grey reading)
 //       1. brothers and sisters; siblings  Noun
 //       Other forms: 兄弟 (けいてい)
-std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entries){
+std::vector<TextSpan> format_entries(const std::vector<WordEntry>& entries){
     std::vector<TextSpan> spans;
-    for (const JishoEntry& entry : entries){
+    for (const WordEntry& entry : entries){
         if (!entry.forms.empty()){
             // Kana-only words have just the reading, which then is the word
-            const JishoForm& main = entry.forms.front();
+            const WordForm& main = entry.forms.front();
             if (main.word.empty()){
                 spans.push_back({main.reading, WORD});
             } else {
@@ -46,7 +46,7 @@ std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entries){
         spans.push_back({"\n"});
 
         int n = 1;
-        for (const JishoSense& sense : entry.senses){
+        for (const WordSense& sense : entry.senses){
             spans.push_back({std::format("    {}. ", n++), NUMBER});
             spans.push_back({join(sense.definitions, "; "), DEFINITION});
             if (!sense.parts_of_speech.empty())
@@ -57,7 +57,7 @@ std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entries){
         if (entry.forms.size() > 1){
             std::vector<std::string> others;
             for (size_t i = 1; i < entry.forms.size(); ++i){
-                const JishoForm& form = entry.forms[i];
+                const WordForm& form = entry.forms[i];
                 if (form.word.empty()) others.push_back(form.reading);
                 else others.push_back(std::format("{} ({})", form.word, form.reading));
             }
@@ -65,5 +65,16 @@ std::vector<TextSpan> format_entries(const std::vector<JishoEntry>& entries){
         }
         spans.push_back({"\n"});
     }
+
+    // Credit where the definitions are from: the dictionary's licence
+    // asks for it, and it tells a result from the file on this computer
+    // from one fetched from jisho.org
+    std::string source;
+    for (const WordEntry& entry : entries){
+        if (entry.source.empty() || source.find(entry.source) != std::string::npos) continue;
+        if (!source.empty()) source += ", ";
+        source += entry.source;
+    }
+    if (!source.empty()) spans.push_back({"From " + source + '\n', OTHER_FORMS});
     return spans;
 }

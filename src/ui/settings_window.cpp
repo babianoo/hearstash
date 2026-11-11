@@ -19,6 +19,7 @@
 #include <FL/Fl_SVG_Image.H>
 
 #include "core/anki_connect.h"
+#include "core/dictionary_files.h"
 #include "core/hearstash_note_type.h"
 #include "core/recorder.h"
 #include "core/settings.h"
@@ -27,21 +28,31 @@
 #include "ui/capturer.h"
 #include "ui/category_button.h"
 #include "ui/clipboard_input.h"
+#include "ui/dictionary_updater.h"
 #include "ui/global_hotkey.h"
 #include "ui/history_store.h"
 #include "ui/icons.h"
 #include "ui/model_downloader.h"
 #include "ui/settings_store.h"
 #include "ui/shortcut_input.h"
+#include "ui/smooth_scroll.h"
 #include "ui/theme.h"
+#include "ui/wrapped_text.h"
 
 // In sidebar order. General has the DeepL key, the history and scrolling;
 // Recording the rolling buffer and stashing; Shortcuts all three hotkeys.
-static constexpr const char* CATEGORY_NAMES[] = {"General", "Speech-to-Text", "Recording", "Shortcuts", "Anki"};
+// Sources isn't settings but what the app is built on, so it sits apart,
+// at the bottom of the sidebar under a line.
+static constexpr const char* CATEGORY_NAMES[] = {"General", "Speech-to-Text", "Recording", "Shortcuts", "Anki",
+                                                 "Sources"};
 // Indexes into CATEGORY_NAMES
-enum Category : size_t { GENERAL, SPEECH_TO_TEXT, RECORDING, SHORTCUTS, ANKI };
+enum Category : size_t { GENERAL, SPEECH_TO_TEXT, RECORDING, SHORTCUTS, ANKI, SOURCES };
 
 static constexpr int SIDEBAR_W = 160;
+// Between the line over Sources and Sources
+static constexpr int SOURCES_GAP = 8;
+// The Sources page's button, wide enough for "Check for updates"
+static constexpr int DICTIONARY_BTN_W = 150;
 static constexpr int CATEGORY_H = 36;
 // Space around the sidebar's list and a page's contents
 static constexpr int MARGIN = 20;
@@ -128,8 +139,8 @@ static size_t index_of(const WhisperModel& model){
 }
 
 SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader,
-                               Capturer& capturer)
-    : settings(settings), history(history), downloader(downloader), capturer(capturer){
+                               Capturer& capturer, DictionaryUpdater& dictionary)
+    : settings(settings), history(history), downloader(downloader), capturer(capturer), dictionary(dictionary){
     // win is the current group here, like in MainWindow
 
     // Its own group so the radio buttons only deselect each other
@@ -137,7 +148,15 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
     sidebar->box(FL_FLAT_BOX);
     sidebar->color(sidebar_color());
     for (size_t i = 0; i < std::size(CATEGORY_NAMES); ++i){
-        const int y = MARGIN + static_cast<int>(i) * CATEGORY_H;
+        int y = MARGIN + static_cast<int>(i) * CATEGORY_H;
+        if (i == SOURCES){
+            // At the bottom, as far from the edge as the first is from the
+            // top, with a line over it as wide as the names
+            y = win.h() - MARGIN - CATEGORY_H;
+            Fl_Box* divider = new Fl_Box(MARGIN, y - SOURCES_GAP, SIDEBAR_W - 2 * MARGIN, 1);
+            divider->box(FL_FLAT_BOX);
+            divider->color(fl_color_average(FL_FOREGROUND_COLOR, sidebar_color(), 0.2f));
+        }
         Fl_Button* category = new CategoryButton(0, y, SIDEBAR_W, CATEGORY_H, CATEGORY_NAMES[i], MARGIN);
         category->callback(on_category, this);
         categories.push_back(category);
@@ -152,6 +171,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
         if (i == RECORDING) add_recording_settings(page_x, page_w);
         if (i == SHORTCUTS) add_shortcut_settings(page_x, page_w);
         if (i == ANKI) add_anki_settings(page_x, page_w);
+        if (i == SOURCES) add_sources(page_x, page_w);
 
         page->end();
         page->hide();    // Shown by select()
@@ -171,6 +191,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
     refresh_history();
     // After the Capturer's own listener, which applies the change first
     settings_listener = settings.add_listener([this]{ refresh_buffer(); });
+    dictionary_listener = dictionary.add_listener([this]{ refresh_sources(); });
 }
 
 SettingsWindow::~SettingsWindow(){
@@ -183,6 +204,7 @@ SettingsWindow::~SettingsWindow(){
     history.remove_listener(history_listener);
     downloader.remove_listener(downloader_listener);
     settings.remove_listener(settings_listener);
+    dictionary.remove_listener(dictionary_listener);
 }
 
 // The DeepL key with an eye button on its right, and whether captures are
@@ -396,6 +418,8 @@ void SettingsWindow::show(){
     anki_listed = false;
     if (pages[ANKI]->visible()) refresh_anki();
     win.show();
+    // Once the window is there: its text can only be laid out then
+    refresh_sources();
 }
 
 void SettingsWindow::show_speech_to_text(){
@@ -428,6 +452,7 @@ void SettingsWindow::select(size_t i){
     // Asked when the page is first looked at, not every time the window
     // opens: it's only needed here
     if (i == ANKI && !anki_listed) refresh_anki();
+    if (i == SOURCES) refresh_sources();
 }
 
 void SettingsWindow::on_key_changed(Fl_Widget*, void* data){
@@ -1017,4 +1042,165 @@ void SettingsWindow::apply_quality(){
         settings.update([quality](Settings& s){ s.anki.picture_quality = quality; });
     // Clamped by update(), and shown that way
     quality_input->value(settings.get().anki.picture_quality);
+}
+
+// ---- Sources ----
+
+// Looks of the credits
+static const TextStyle CREDIT{FL_HELVETICA, 13};
+static const TextStyle CREDIT_HEADING{FL_HELVETICA_BOLD, 13};
+static const TextStyle CREDIT_SMALL{FL_HELVETICA, 12, DIM};
+
+// The dictionary's name, then a line with its age (or an update's
+// progress) and the button that looks for a newer one. Under them, filling
+// the rest of the page, where it's from and under which licences, in a
+// scroll since it's longer than the page.
+void SettingsWindow::add_sources(int x, int w){
+    const int left = x + MARGIN, right = x + w - MARGIN;
+    // Lines up with the first category in the sidebar, like the General page
+    int y = MARGIN + (CATEGORY_H - 20) / 2;
+
+    Fl_Box* label = new Fl_Box(left, y, LABEL_W, 20, "Dictionary");
+    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    dictionary_name = new Fl_Box(left + LABEL_W, y, right - left - LABEL_W, 20);
+    dictionary_name->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    set_tip({label, dictionary_name},
+            "Words are looked up in this file on your computer. Without one, on jisho.org.");
+    y += 20 + 6;
+
+    // From the left edge, under the label: "Looking for a newer one..."
+    // doesn't fit beside it
+    const int btn_x = right - DICTIONARY_BTN_W;
+    dictionary_status = dim_line(left, y, btn_x - 8 - left, MODEL_BTN_H);
+    dictionary_progress = new Fl_Progress(left, y + (MODEL_BTN_H - 18) / 2, btn_x - 8 - left, 18);
+    dictionary_progress->minimum(0);
+    dictionary_progress->maximum(1);
+    dictionary_progress->selection_color(ACCENT);
+    dictionary_progress->labelsize(12);
+    dictionary_progress->hide();
+    dictionary_btn = new Fl_Button(btn_x, y, DICTIONARY_BTN_W, MODEL_BTN_H);
+    dictionary_btn->box(FL_ROUND_UP_BOX);
+    dictionary_btn->clear_visible_focus();
+    dictionary_btn->callback(on_dictionary_action, this);
+    set_tip({dictionary_btn}, std::format("A new one comes out about monthly. The app also looks by itself when "
+                                          "this one is over {} days old.", DICTIONARY_MAX_AGE_DAYS));
+    y += MODEL_BTN_H + GROUP_GAP;
+
+    credits_scroll = new SmoothScroll(left, y, right - left, win.h() - MARGIN - y);
+    credits_scroll->box(FL_FLAT_BOX);
+    credits_scroll->color(FL_BACKGROUND_COLOR);
+    credits = new WrappedText(left, y, credits_scroll->content_w());
+    credits->color(FL_BACKGROUND_COLOR);
+    credits_scroll->end();
+}
+
+void SettingsWindow::on_dictionary_action(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    if (self->dictionary.busy()) self->dictionary.cancel();
+    else self->dictionary.update();
+}
+
+// Where the dictionary is from, as its licences ask to be told: Jitendex's
+// (CC BY-SA 4.0), and those of what it's built from. file is the app's
+// copy of it, empty if there's none.
+static std::vector<TextSpan> credit_spans(const DictionaryInfo* info, const std::string& file){
+    std::vector<TextSpan> spans;
+    const auto heading = [&](const char* text){ spans.push_back({std::string(text) + '\n', CREDIT_HEADING}); };
+    const auto line = [&](const std::string& text){ spans.push_back({text + '\n', CREDIT}); };
+    const auto link = [&](const char* text){ spans.push_back({std::string(text) + "\n\n", CREDIT_SMALL}); };
+
+    heading("Jitendex");
+    line("The definitions, example sentences and readings Hearstash shows and puts on cards come from Jitendex, "
+         "by Stephen Kraus, used under the Creative Commons Attribution-ShareAlike 4.0 licence.");
+    link("jitendex.org\ncreativecommons.org/licenses/by-sa/4.0");
+
+    heading("Hearstash's copy of it");
+    line("Hearstash keeps Jitendex as one file, rearranged so a word can be found quickly. Its text isn't changed. "
+         "The file is under the same licence, so you may copy and share it on the same terms.");
+    link(file.empty() ? "Not installed" : file.c_str());
+
+    heading("JMdict");
+    line("Jitendex is built from the JMdict dictionary files. These files are the property of the Electronic "
+         "Dictionary Research and Development Group, and are used in conformance with the Group's licence.");
+    link("edrdg.org\nedrdg.org/edrdg/licence.html");
+
+    heading("Tatoeba");
+    line("The example sentences are from Tatoeba, under the Creative Commons Attribution 2.0 France licence. "
+         "On a card, each sentence links to its page on Tatoeba, which names who wrote it.");
+    link("tatoeba.org\ncreativecommons.org/licenses/by/2.0/fr");
+
+    heading("JmdictFurigana");
+    line("Which reading goes over which kanji is from JmdictFurigana, under the Creative Commons "
+         "Attribution-ShareAlike 4.0 licence.");
+    link("github.com/Doublevil/JmdictFurigana");
+
+    if (info && !info->attribution.empty()){
+        heading("In Jitendex's own words");
+        spans.push_back({info->attribution + "\n\n", CREDIT_SMALL});
+    }
+
+    heading("jisho.org");
+    line("Without the dictionary file, or when it has nothing for a search, such as one in English, words are "
+         "looked up on jisho.org instead.");
+    return spans;
+}
+
+void SettingsWindow::refresh_sources(){
+    // Laying out text needs the window on screen
+    if (!win.shown()) return;
+    const DictionaryUpdater::State& state = dictionary.state();
+    const std::optional<DictionaryInfo>& info = dictionary.installed();
+    using Status = DictionaryUpdater::Status;
+
+    dictionary_name->copy_label(info ? info->title.c_str() : "None installed");
+
+    const bool progressing = state.status == Status::Downloading || state.status == Status::Converting;
+    dictionary_status->labelcolor(DIM);
+    dictionary_status->tooltip(nullptr);
+    if (progressing){
+        dictionary_status->hide();
+        dictionary_progress->show();
+        const char* doing = state.status == Status::Downloading ? "Downloading" : "Converting";
+        // The server sends the size with its first bytes
+        if (state.total){
+            dictionary_progress->value(static_cast<float>(static_cast<double>(state.done) / static_cast<double>(state.total)));
+            dictionary_progress->copy_label(std::format("{} {}%", doing, state.done * 100 / state.total).c_str());
+        } else {
+            dictionary_progress->value(0);
+            dictionary_progress->copy_label(std::format("{}...", doing).c_str());
+        }
+    } else {
+        dictionary_progress->hide();
+        dictionary_status->show();
+        if (state.status == Status::Checking){
+            dictionary_status->copy_label("Looking for a newer one...");
+        } else if (state.status == Status::Failed){
+            dictionary_status->copy_label("Couldn't update");
+            dictionary_status->labelcolor(ERROR_COLOR);
+            dictionary_status->copy_tooltip(state.error.c_str());
+        } else if (!info){
+            dictionary_status->copy_label("Words are looked up on jisho.org");
+        } else {
+            const int age = dictionary_age_days(*info);
+            const std::string days = age == 1 ? "1 day old" : std::format("{} days old", age);
+            dictionary_status->copy_label(state.up_to_date ? (days + ", the latest").c_str() : days.c_str());
+        }
+    }
+    dictionary_btn->copy_label(dictionary.busy() ? "Cancel" : info ? "Check for updates" : "Download");
+
+    // Only when it's another dictionary: setting the text scrolls it back
+    // to the top
+    const std::string file = dictionary.installed_path().string();
+    const std::string key = (info ? info->title : std::string()) + '\n' + file;
+    if (key != credits_for || credits_for.empty()){
+        credits_for = key;
+        credits_scroll->scroll_to_top();
+        credits->text(credit_spans(info ? &*info : nullptr, file));
+    }
+
+    dictionary_name->redraw();
+    dictionary_status->redraw();
+    dictionary_progress->redraw();
+    dictionary_btn->redraw();
+    credits_scroll->redraw();
 }

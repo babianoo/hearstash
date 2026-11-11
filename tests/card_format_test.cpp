@@ -21,6 +21,7 @@ static std::string field(const std::vector<std::pair<std::string, std::string>>&
 
 static const CardContent CARD{
     .word = "悩む", .reading = "なやむ", .meaning = "[Godan verb with 'mu' ending] [Intransitive verb]\n1. to be worried; to be troubled\n2. to suffer (from)",
+    .glossary_html = {},
     .sentence = "私だってもうちょっと悩んでたかも", .highlight = "悩んでた",
     .audio_file = "hearstash_1.wav", .picture_file = "hearstash_1.jpg",
 };
@@ -138,8 +139,29 @@ static void test_sense_groups(){
     CHECK(field(format_card(card, s), "Meaning") == "(missing)");
 }
 
+// A dictionary's own entry goes on the card in place of the typed meaning
+static void test_dictionary_entry(){
+    AnkiSettings s;
+    s.word_field = s.reading_field = s.meaning_field = "Back";
+    s.sentence_field = s.audio_field = s.picture_field = "";
+    CardContent card = CARD;
+    card.glossary_html = card_glossary("Dict [1] \"x\"", "<ul><li>worry</li></ul>", "li { color: red; }");
+    CHECK(card.glossary_html ==
+          "<div style=\"text-align: left;\" class=\"yomitan-glossary\"><ol><li data-dictionary=\"Dict [1] &quot;x&quot;\">"
+          "<span><ul><li>worry</li></ul></span></li></ol><style>li { color: red; }</style></div>");
+    CHECK(field(format_card(card, s), "Back") == "悩む【なやむ】 <br>" + card.glossary_html + "<br><br><a href=\"\"></a>");
+
+    // Nothing to style, or something that isn't styles: no <style>
+    CHECK(card_glossary("D", "x", "") == "<div style=\"text-align: left;\" class=\"yomitan-glossary\"><ol>"
+                                         "<li data-dictionary=\"D\"><span>x</span></li></ol></div>");
+    CHECK(card_glossary("D", "x", "</style><script>").find("script") == std::string::npos);
+    // No entry is no glossary
+    CHECK(card_glossary("D", "", "li {}").empty());
+}
+
 int main(){
     test_immersion_layout();
+    test_dictionary_entry();
     test_a_field_each();
     test_details();
     test_sense_groups();

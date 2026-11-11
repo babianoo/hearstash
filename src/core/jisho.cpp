@@ -9,17 +9,18 @@
 
 using json = nlohmann::json;
 
-std::vector<JishoEntry> jisho_search(std::string_view keyword){
+std::vector<WordEntry> jisho_search(std::string_view keyword){
     const std::string body = http_get(
         "https://jisho.org/api/v1/search/words?keyword=" + url_encode(keyword));
 
     // Only the fields we use. value() falls back to the default when a
     // field is missing, since Jisho leaves out e.g. "word" for kana-only
     // words. Anything else unexpected throws json::exception.
-    std::vector<JishoEntry> entries;
+    std::vector<WordEntry> entries;
     try {
         for (const json& item : json::parse(body).at("data")){
-            JishoEntry entry;
+            WordEntry entry;
+            entry.source = "jisho.org";
             entry.is_common = item.value("is_common", false);
 
             for (const json& jp : item.at("japanese")){

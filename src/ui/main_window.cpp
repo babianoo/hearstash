@@ -21,6 +21,7 @@
 #include "core/recorder.h"
 #include "core/settings.h"
 #include "core/whisper_models.h"
+#include "core/word_lookup.h"
 #include "ui/capturer.h"
 #include "ui/clipboard.h"
 #include "ui/history_store.h"
@@ -95,8 +96,10 @@ static Fl_Button* icon_button(int x, const char* svg, const char* tooltip, bool 
 }
 
 MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader,
-                       Capturer& capturer, SharedTranscriber& transcriber, StashStore& stash)
-    : settings(settings), history(history), downloader(downloader), capturer(capturer), stash(stash),
+                       Capturer& capturer, SharedTranscriber& transcriber, StashStore& stash,
+                       DictionaryUpdater& dictionary)
+    : settings(settings), history(history), downloader(downloader), capturer(capturer), dictionary(dictionary),
+      stash(stash),
       transcriber(transcriber){
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
@@ -267,7 +270,8 @@ void MainWindow::on_transcribed(void* data){
 }
 
 SettingsWindow& MainWindow::settings_window(){
-    if (!settings_win) settings_win = std::make_unique<SettingsWindow>(settings, history, downloader, capturer);
+    if (!settings_win)
+        settings_win = std::make_unique<SettingsWindow>(settings, history, downloader, capturer, dictionary);
     return *settings_win;
 }
 
@@ -376,7 +380,8 @@ void MainWindow::search(){
         auto* result = new SearchResult{.win = this, .id = id, .keyword = keyword, .api = api};
         try {
             if (api == Api::DeepL) result->translation = deepl_translate(keyword, deepl_key);
-            else result->entries = jisho_search(keyword);
+            // The whole of what's typed, not just its start
+            else result->entries = look_up_word(keyword, false).entries;
         } catch (const std::exception& e){
             result->error = e.what();
         }

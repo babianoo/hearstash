@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -15,6 +16,10 @@ struct CardContent {
     // glossary numbers them itself. A line like "[Noun] [Suru verb]" gives
     // the parts of speech of the senses under it, up to the next such line.
     std::string meaning;
+    // The meanings as a dictionary file has them, already HTML
+    // (card_glossary()). When it isn't empty it goes on the card in
+    // meaning's place.
+    std::string glossary_html;
     std::string sentence;
     // The part of sentence to highlight, as it's written there, e.g. 悩んでた.
     // Its first place in sentence is highlighted; nothing is if it isn't
@@ -44,3 +49,12 @@ struct CardContent {
 // escaped, so <, > and & show as they are. Fields with nothing in them
 // are left out.
 std::vector<std::pair<std::string, std::string>> format_card(const CardContent& card, const AnkiSettings& settings);
+
+// A dictionary's entry for a word as the HTML a card's meaning gets, the
+// way Yomitan writes it:
+//   <div class="yomitan-glossary"><ol><li data-dictionary="title">
+//     <span>definitions</span></li></ol><style>styles</style></div>
+// definitions is render_definitions()'s HTML, and styles the dictionary's
+// stylesheet from scope_styles() for the same title, which goes along so
+// the entry looks right on any note type. Empty if definitions is.
+std::string card_glossary(std::string_view dictionary, std::string_view definitions, std::string_view styles);

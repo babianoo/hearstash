@@ -21,3 +21,7 @@ std::filesystem::path state_dir();
 //   Windows: %LOCALAPPDATA%\Hearstash
 //   Linux:   $XDG_DATA_HOME/Hearstash, or ~/.local/share/Hearstash
 std::filesystem::path data_dir();
+
+// The folder the program itself is in, for what's shipped next to it, e.g.
+// the dictionary. Throws std::runtime_error if the system won't say.
+std::filesystem::path program_dir();

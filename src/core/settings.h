@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <string>
@@ -144,10 +145,19 @@ struct ScreenTextSettings {
     std::map<std::string, ScreenArea> areas;
 };
 
+// The dictionary words are looked up in. Not a category of the window:
+// it has nothing to choose.
+struct DictionarySettings {
+    // When the user last said "later" to a newer dictionary, in seconds
+    // since 1970, so the app doesn't ask again at every start. 0 if never.
+    std::int64_t update_declined = 0;
+};
+
 struct Settings {
     AnkiSettings anki;
     ApiSettings api;
     BufferSettings buffer;
+    DictionarySettings dictionary;
     GeneralSettings general;
     HistorySettings history;
     ScreenTextSettings screen_text;

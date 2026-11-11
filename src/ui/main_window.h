@@ -24,6 +24,7 @@ class ModelDownloader;
 class Recorder;
 class SearchBar;
 class SettingsStore;
+class DictionaryUpdater;
 class SettingsWindow;
 class SharedTranscriber;
 class SmoothScroll;
@@ -36,10 +37,9 @@ struct TextSpan;
 
 class MainWindow {
 public:
-    // settings, history, downloader, capturer, transcriber and stash have
-    // to outlive the window
+    // All of them have to outlive the window
     MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader, Capturer& capturer,
-               SharedTranscriber& transcriber, StashStore& stash);
+               SharedTranscriber& transcriber, StashStore& stash, DictionaryUpdater& dictionary);
     // Defined in main_window.cpp, where SettingsWindow, HistoryWindow,
     // StashWindow and Recorder are complete types, which unique_ptr needs
     // to delete them. Stops listening to the stash.
@@ -60,7 +60,7 @@ private:
         unsigned id;
         std::string keyword;
         Api api;
-        std::vector<JishoEntry> entries{};          // Jisho
+        std::vector<WordEntry> entries{};          // Jisho
         std::optional<std::string> translation{};   // DeepL
         std::string error{};    // Non-empty if the search failed
     };
@@ -91,6 +91,7 @@ private:
     // Only passed on to settings_win
     ModelDownloader& downloader;
     Capturer& capturer;
+    DictionaryUpdater& dictionary;
     // Created on the first click of the settings button. Not a plain
     // member: constructing a window makes it the current group, so while
     // win's widgets are being created it would take them in instead of win.

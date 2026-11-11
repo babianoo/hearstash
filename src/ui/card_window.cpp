@@ -100,6 +100,9 @@ void CardWindow::open(CardDraft new_draft, std::function<void()> new_on_added){
     word_input->value(draft.word.c_str());
     reading_input->value(draft.reading.c_str());
     meaning_input->value(draft.meaning.c_str());
+    meaning_input->tooltip(draft.glossary_html.empty() ? nullptr
+        : "Left as it is, the card gets the dictionary's whole entry, with its example sentences.\n"
+          "Edit it and the card gets what's typed here instead.");
     sentence_input->value(draft.sentence.c_str());
     highlight_input->value(draft.highlight.c_str());
 
@@ -161,8 +164,12 @@ void CardWindow::on_add(Fl_Widget*, void* data){
 void CardWindow::add(){
     const AnkiSettings& anki = settings.get().anki;
     CardContent card{.word = word_input->value(), .reading = reading_input->value(),
-                     .meaning = meaning_input->value(), .sentence = sentence_input->value(),
+                     .meaning = meaning_input->value(), .glossary_html = {}, .sentence = sentence_input->value(),
                      .highlight = highlight_input->value(), .audio_file = {}, .picture_file = {}};
+    // Left as the dictionary gave it, the card gets the dictionary's whole
+    // entry. Edited, it gets what's typed: the entry can't be edited as
+    // text.
+    if (card.meaning == draft.meaning) card.glossary_html = draft.glossary_html;
 
     // Named by the time, so they don't replace another card's in Anki's
     // media folder

@@ -15,6 +15,7 @@
 #include "core/config_dir.h"
 #include "core/http.h"
 #include "ui/capturer.h"
+#include "ui/dictionary_updater.h"
 #include "ui/global_hotkey.h"
 #include "ui/theme.h"
 #include "ui/history_store.h"
@@ -83,8 +84,17 @@ int main(int argc, char** argv){
     // plays from now until the app quits.
     Capturer capturer(settings, transcriber, stash);
 
-    MainWindow main_win(settings, history, downloader, capturer, transcriber, stash);
+    // The same goes for it. Quitting cancels a dictionary update still
+    // running.
+    DictionaryUpdater dictionary(settings);
+
+    MainWindow main_win(settings, history, downloader, capturer, transcriber, stash, dictionary);
     main_win.show(argc, argv);
+
+    // Once there's a window for it to ask in: opens the dictionary, so the
+    // first lookup doesn't wait for that, and offers a newer one if this
+    // one has got old
+    dictionary.check_at_start();
 
     return Fl::run();
 }

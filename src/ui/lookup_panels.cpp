@@ -12,6 +12,7 @@
 
 #include "core/deepl.h"
 #include "core/lookup_text.h"
+#include "core/word_lookup.h"
 #include "core/settings.h"
 #include "ui/card_window.h"
 #include "ui/jisho_format.h"
@@ -97,13 +98,18 @@ void LookupPanels::look_up_selection(){
     const unsigned id = ++latest;
     set_panel({{std::format("Looking up {}...", selected), NOTE}});
 
-    // Like the main window's searches: the request can take seconds, so
-    // it's made on a thread that only hands its result back. Nothing
+    // Like the main window's searches: opening the dictionary takes a
+    // moment the first time, and a request to jisho.org can take seconds,
+    // so it's done on a thread that only hands its result back. Nothing
     // waits for it.
     std::thread([this, id, selected]{
         auto* result = new LookupResult{.panels = this, .id = id, .keyword = selected};
         try {
-            result->entries = jisho_search(selected);
+            // A selection often takes in the particle after the word, so
+            // its start is enough
+            WordLookup found = look_up_word(selected, true);
+            result->entries = std::move(found.entries);
+            result->matched = std::move(found.matched);
         } catch (const std::exception& e){
             result->error = e.what();
         }
@@ -118,14 +124,15 @@ void LookupPanels::on_lookup_done(void* data){
     // A newer lookup started since, or the text changed
     if (result->id != self->latest) return;
 
-    self->keyword = result->keyword;
+    // What a card highlights in the sentence: the word, not the particle
+    // selected with it
+    self->keyword = result->matched.empty() ? result->keyword : result->matched;
     if (result->entries.empty()) self->entry.reset();
     else self->entry.emplace(result->entries.front());
 
     if (!result->error.empty())
         self->set_panel({{std::format("Couldn't look up {}: {}", result->keyword, result->error), NOTE}});
     else if (result->entries.empty())
-        // Jisho knows dictionary forms, and only some inflected ones
         self->set_panel({{std::format("Nothing found for {}. Try selecting less, or the word's dictionary form.",
                                       result->keyword), NOTE}});
     else self->set_panel(format_entries(result->entries));
@@ -187,13 +194,13 @@ void LookupPanels::on_translation_done(void* data){
 // their parts of speech, e.g.
 //   [Noun]
 //   1. prey; catch; kill; game
-static std::string meanings(const JishoEntry& entry){
+static std::string meanings(const WordEntry& entry){
     std::string text;
     // The last line of them written. A sense that names none has the ones
     // before it.
     std::string tags;
     int n = 1;
-    for (const JishoSense& sense : entry.senses){
+    for (const WordSense& sense : entry.senses){
         std::string line;
         for (const std::string& part : sense.parts_of_speech){
             if (!line.empty()) line += ' ';
@@ -220,9 +227,10 @@ void LookupPanels::fill(CardDraft& draft) const {
     draft.highlight = keyword;
     if (entry && !entry->forms.empty()){
         // Kana-only words have just the reading, which then is the word
-        const JishoForm& form = entry->forms.front();
+        const WordForm& form = entry->forms.front();
         draft.word = form.word.empty() ? form.reading : form.word;
         draft.reading = form.reading;
         draft.meaning = meanings(*entry);
+        draft.glossary_html = entry->glossary_html;
     }
 }

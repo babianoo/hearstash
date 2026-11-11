@@ -23,6 +23,10 @@ struct CardDraft {
     std::string word;
     std::string reading;
     std::string meaning;
+    // The dictionary's own entry for the word, as the HTML the card gets
+    // if meaning is left as it is: it has what plain text can't, like
+    // example sentences. Empty when the dictionary gave none.
+    std::string glossary_html;
     std::string sentence;
     // The part of sentence that was looked up, as it's written there
     std::string highlight;

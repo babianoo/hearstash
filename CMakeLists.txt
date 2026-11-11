@@ -22,6 +22,10 @@ find_package(nlohmann_json 3.11 REQUIRED)
 # For saving the pictures on Anki cards. libjpeg-turbo is usually there
 # already, since FLTK loads JPEGs with it.
 find_package(JPEG REQUIRED)
+# For the dictionary: its zip is read with zlib, and the app's own
+# dictionary file is compressed with it. Usually there already, since curl
+# and libpng use it.
+find_package(ZLIB REQUIRED)
 # System FLTK may be built with cairo support, so its public header needs
 # cairo.h even though we don't use cairo directly.
 pkg_check_modules(CAIRO QUIET cairo)
@@ -145,6 +149,10 @@ add_executable(hearstash
     src/core/http.cpp
     src/core/image.cpp
     src/core/deepl.cpp
+    src/core/deinflect.cpp
+    src/core/dictionary.cpp
+    src/core/dictionary_files.cpp
+    src/core/dictionary_import.cpp
     src/core/jisho.cpp
     src/core/local_time.cpp
     src/core/lookup_text.cpp
@@ -162,9 +170,12 @@ add_executable(hearstash
     src/core/sha1.cpp
     src/core/shortcut.cpp
     src/core/stash.cpp
+    src/core/structured_content.cpp
     src/core/time_ranges.cpp
     src/core/transcriber.cpp
     src/core/whisper_models.cpp
+    src/core/word_lookup.cpp
+    src/core/zip_archive.cpp
     src/ui/bring_to_front.cpp
     src/ui/capture_window.cpp
     src/ui/card_window.cpp
@@ -173,6 +184,7 @@ add_executable(hearstash
     src/ui/clipboard.cpp
     src/ui/clipboard_input.cpp
     src/ui/crop_view.cpp
+    src/ui/dictionary_updater.cpp
     src/ui/filter_bar.cpp
     src/ui/fit_line.cpp
     src/ui/global_hotkey.cpp
@@ -219,6 +231,7 @@ target_link_libraries(hearstash PRIVATE
     ${FLTK_LIBRARIES}
     CURL::libcurl
     JPEG::JPEG
+    ZLIB::ZLIB
     nlohmann_json::nlohmann_json
     # Brings its include directory and ggml's libraries with it
     whisper
@@ -251,6 +264,81 @@ if(onnxruntime_FOUND)
         target_link_libraries(read_text PRIVATE gdi32 user32)
     else()
         target_link_libraries(read_text PRIVATE PNG::PNG)
+    endif()
+endif()
+
+# --- The dictionary the app ships with ---
+# Jitendex (jitendex.org, CC BY-SA 4.0), converted to the app's own
+# dictionary file and put next to the program, where the app looks for it.
+# The zip is fetched when CMake configures, and again once the copy here
+# is a week old, since a build to hand out should have a current one: the
+# licence of the data Jitendex is built on asks for that. Without a
+# connection the build goes on without a dictionary, and the app then looks
+# words up on jisho.org until it has downloaded one itself.
+#   -DHEARSTASH_DICTIONARY=OFF        builds no dictionary file
+#   -DHEARSTASH_DICTIONARY_ZIP=<zip>  converts that zip instead of fetching one
+option(HEARSTASH_DICTIONARY "Build the dictionary file the app ships with" ON)
+set(HEARSTASH_DICTIONARY_ZIP "" CACHE FILEPATH "A Yomitan-format dictionary zip to convert instead of fetching Jitendex")
+set(DICTIONARY_URL "https://github.com/stephenmk/stephenmk.github.io/releases/latest/download/jitendex-yomitan.zip")
+
+# What the dictionary takes without the app around it: the converter here,
+# and the tests further down
+set(DICTIONARY_SOURCES
+    src/core/dictionary.cpp
+    src/core/dictionary_import.cpp
+    src/core/http.cpp
+    src/core/sha1.cpp
+    src/core/verified_download.cpp
+    src/core/zip_archive.cpp
+)
+# Converts a dictionary's zip: tools/make_dictionary.cpp says how
+add_executable(make_dictionary tools/make_dictionary.cpp ${DICTIONARY_SOURCES})
+target_compile_options(make_dictionary PRIVATE -Wall -Wextra)
+target_include_directories(make_dictionary PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(make_dictionary PRIVATE ZLIB::ZLIB CURL::libcurl nlohmann_json::nlohmann_json)
+
+if(HEARSTASH_DICTIONARY)
+    set(DICTIONARY_ZIP "${HEARSTASH_DICTIONARY_ZIP}")
+    if(NOT DICTIONARY_ZIP)
+        set(DICTIONARY_ZIP "${CMAKE_BINARY_DIR}/jitendex-yomitan.zip")
+        set(DICTIONARY_FETCH TRUE)
+        if(EXISTS "${DICTIONARY_ZIP}")
+            file(TIMESTAMP "${DICTIONARY_ZIP}" DICTIONARY_FETCHED "%s" UTC)
+            string(TIMESTAMP DICTIONARY_NOW "%s" UTC)
+            math(EXPR DICTIONARY_ZIP_AGE "${DICTIONARY_NOW} - ${DICTIONARY_FETCHED}")
+            if(DICTIONARY_ZIP_AGE LESS 604800)
+                set(DICTIONARY_FETCH FALSE)
+            endif()
+        endif()
+        if(DICTIONARY_FETCH)
+            message(STATUS "Fetching the dictionary (about 40 MB): ${DICTIONARY_URL}")
+            # To the side first, so a download that fails leaves the copy
+            # there was
+            file(DOWNLOAD "${DICTIONARY_URL}" "${DICTIONARY_ZIP}.part" STATUS DICTIONARY_STATUS TLS_VERIFY ON)
+            list(GET DICTIONARY_STATUS 0 DICTIONARY_ERROR)
+            if(DICTIONARY_ERROR EQUAL 0)
+                file(RENAME "${DICTIONARY_ZIP}.part" "${DICTIONARY_ZIP}")
+            else()
+                file(REMOVE "${DICTIONARY_ZIP}.part")
+                list(GET DICTIONARY_STATUS 1 DICTIONARY_ERROR_TEXT)
+                message(WARNING "Couldn't fetch the dictionary (${DICTIONARY_ERROR_TEXT})")
+            endif()
+        endif()
+    endif()
+
+    if(EXISTS "${DICTIONARY_ZIP}")
+        # Next to the program. Also made again when the converter changes,
+        # as the file's layout may have.
+        set(DICTIONARY_FILE "${CMAKE_BINARY_DIR}/jitendex.hsdict")
+        add_custom_command(
+            OUTPUT "${DICTIONARY_FILE}"
+            COMMAND make_dictionary "${DICTIONARY_ZIP}" "${DICTIONARY_FILE}"
+            DEPENDS make_dictionary "${DICTIONARY_ZIP}"
+            COMMENT "Converting the dictionary"
+            VERBATIM)
+        add_custom_target(dictionary ALL DEPENDS "${DICTIONARY_FILE}")
+    else()
+        message(WARNING "No dictionary zip: the app is built without a dictionary file")
     endif()
 endif()
 
@@ -318,3 +406,24 @@ target_compile_options(stash_test PRIVATE -Wall -Wextra)
 target_include_directories(stash_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(stash_test PRIVATE JPEG::JPEG nlohmann_json::nlohmann_json)
 add_test(NAME stash COMMAND stash_test)
+
+add_executable(structured_content_test tests/structured_content_test.cpp src/core/structured_content.cpp)
+target_compile_options(structured_content_test PRIVATE -Wall -Wextra)
+target_include_directories(structured_content_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(structured_content_test PRIVATE nlohmann_json::nlohmann_json)
+add_test(NAME structured_content COMMAND structured_content_test)
+
+add_executable(deinflect_test tests/deinflect_test.cpp src/core/deinflect.cpp)
+target_compile_options(deinflect_test PRIVATE -Wall -Wextra)
+target_include_directories(deinflect_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME deinflect COMMAND deinflect_test)
+
+# With what looks words up in it too
+add_executable(dictionary_test tests/dictionary_test.cpp ${DICTIONARY_SOURCES}
+               src/core/anki_fields.cpp src/core/card_format.cpp src/core/config_dir.cpp src/core/deinflect.cpp
+               src/core/dictionary_files.cpp src/core/jisho.cpp src/core/structured_content.cpp
+               src/core/word_lookup.cpp)
+target_compile_options(dictionary_test PRIVATE -Wall -Wextra)
+target_include_directories(dictionary_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(dictionary_test PRIVATE ZLIB::ZLIB CURL::libcurl nlohmann_json::nlohmann_json)
+add_test(NAME dictionary COMMAND dictionary_test)

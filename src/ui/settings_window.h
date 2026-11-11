@@ -14,10 +14,13 @@
 // headers are included in settings_window.cpp instead.
 class Capturer;
 class ClipboardInput;
+class DictionaryUpdater;
 class HistoryStore;
 class ModelDownloader;
 class SettingsStore;
 class ShortcutInput;
+class SmoothScroll;
+class WrappedText;
 class Fl_Box;
 class Fl_Button;
 class Fl_Check_Button;
@@ -39,17 +42,20 @@ struct WhisperModel;
 // has the capture, screen capture and stash shortcuts (on Linux, the
 // commands to bind to keys). The Anki page has the deck and note type to
 // add cards to, which field gets each part of a card, both listed from
-// Anki, and the picture's quality.
+// Anki, and the picture's quality. The Sources page, set apart at the
+// bottom of the sidebar, says which dictionary words are looked up in, how
+// old it is, with a button to get the latest, and credits where it's from
+// as its licences ask.
 //
 // Each setting is one short line; what it does in more detail is in its
 // tooltip. Changes go into the SettingsStore it was given as they're made,
 // which saves them: there's no Apply button.
 class SettingsWindow {
 public:
-    // settings, history, downloader and capturer have to outlive the window
+    // All of them have to outlive the window
     SettingsWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader,
-                   Capturer& capturer);
-    // Stops listening to history and downloader
+                   Capturer& capturer, DictionaryUpdater& dictionary);
+    // Stops listening to history, downloader and dictionary
     ~SettingsWindow();
 
     // One settings window per app: copying makes no sense
@@ -82,8 +88,10 @@ private:
     HistoryStore& history;
     ModelDownloader& downloader;
     Capturer& capturer;
-    // From history.add_listener, downloader.add_listener and
-    // settings.add_listener
+    DictionaryUpdater& dictionary;
+    // From history.add_listener, downloader.add_listener,
+    // settings.add_listener and dictionary.add_listener
+    int dictionary_listener = -1;
     int history_listener = -1;
     int downloader_listener = -1;
     int settings_listener = -1;
@@ -146,6 +154,20 @@ private:
     Fl_Box* anki_status = nullptr;
     // The lists have been asked from Anki since the window was opened
     bool anki_listed = false;
+    // On the Sources page: the dictionary's name, then its age or how an
+    // update is going, with the progress in the age's place
+    Fl_Box* dictionary_name = nullptr;
+    Fl_Box* dictionary_status = nullptr;
+    Fl_Progress* dictionary_progress = nullptr;
+    // Check for updates, or Cancel
+    Fl_Button* dictionary_btn = nullptr;
+    // Where the dictionary is from and under which licences. The text is
+    // the scroll's only child.
+    SmoothScroll* credits_scroll = nullptr;
+    WrappedText* credits = nullptr;
+    // What credits was last filled in for, to only do it again when the
+    // dictionary changes
+    std::string credits_for;
 
     // Static because FLTK callbacks are plain functions; the
     // SettingsWindow comes in through data.
@@ -173,6 +195,7 @@ private:
     static void on_field_chosen(Fl_Widget* w, void* data);
     static void on_anki_reload(Fl_Widget* w, void* data);
     static void on_quality(Fl_Widget* w, void* data);
+    static void on_dictionary_action(Fl_Widget* w, void* data);
 
     // Add a page's settings to the current group, a page starting at x
     // that's w wide
@@ -183,6 +206,7 @@ private:
     // with a line for why it can't be received
     void add_shortcut_settings(int x, int w);
     void add_anki_settings(int x, int w);
+    void add_sources(int x, int w);
     void select(size_t i);
     // Shows how many searches there are, which changes with every search
     void refresh_history();
@@ -216,4 +240,7 @@ private:
     void refresh_fields();
     // Saves the picture quality typed. Does nothing if it hasn't changed.
     void apply_quality();
+    // Shows which dictionary is installed, its age and how an update is
+    // going, and the credits for it
+    void refresh_sources();
 };
