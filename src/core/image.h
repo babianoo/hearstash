@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <vector>
 
 // A picture in memory: width * height pixels, row by row from the top,
@@ -46,3 +47,7 @@ Image rotate_left(const Image& image);
 // image as a JPEG file's bytes, at quality from 1 to 100. Throws
 // std::runtime_error if image is empty, or libjpeg fails.
 std::vector<std::uint8_t> encode_jpeg(const Image& image, int quality);
+
+// The picture in a JPEG file's bytes, e.g. one encode_jpeg made. Throws
+// std::runtime_error if it isn't one, or is broken.
+Image decode_jpeg(std::span<const std::uint8_t> data);

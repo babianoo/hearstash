@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <stdexcept>
 
 // Appends value's lowest bytes, lowest first, as WAV wants
 static void put(std::vector<std::uint8_t>& out, std::uint32_t value, int bytes){
@@ -33,6 +35,46 @@ std::vector<std::uint8_t> encode_wav(std::span<const float> samples, int rate){
         put(out, static_cast<std::uint16_t>(value), 2);
     }
     return out;
+}
+
+// The value of the bytes at data[at...], lowest first, as WAV has them
+static std::uint32_t get(std::span<const std::uint8_t> data, size_t at, int bytes){
+    std::uint32_t value = 0;
+    for (int i = bytes - 1; i >= 0; --i) value = (value << 8) | data[at + static_cast<size_t>(i)];
+    return value;
+}
+
+DecodedWav decode_wav(std::span<const std::uint8_t> data){
+    const auto is = [&](size_t at, const char* tag){ return std::memcmp(data.data() + at, tag, 4) == 0; };
+    if (data.size() < 12 || !is(0, "RIFF") || !is(8, "WAVE")) throw std::runtime_error("It isn't a WAV file");
+
+    DecodedWav out;
+    bool have_format = false;
+    // Chunks: a 4-byte tag, a 4-byte size, then that many bytes, padded to
+    // an even number
+    for (size_t at = 12; at + 8 <= data.size();){
+        const size_t size = get(data, at + 4, 4);
+        const size_t body = at + 8;
+        if (size > data.size() - body) throw std::runtime_error("The WAV file is cut off");
+        if (is(at, "fmt ")){
+            if (size < 16) throw std::runtime_error("The WAV file's format is broken");
+            if (get(data, body, 2) != 1 || get(data, body + 2, 2) != 1 || get(data, body + 14, 2) != 16)
+                throw std::runtime_error("Only 16-bit mono WAV files can be read");
+            out.rate = static_cast<int>(get(data, body + 4, 4));
+            if (out.rate <= 0) throw std::runtime_error("The WAV file has no sample rate");
+            have_format = true;
+        } else if (is(at, "data")){
+            if (!have_format) throw std::runtime_error("The WAV file's samples come before its format");
+            out.samples.reserve(size / 2);
+            for (size_t i = body; i + 2 <= body + size; i += 2){
+                const auto value = static_cast<std::int16_t>(get(data, i, 2));
+                out.samples.push_back(static_cast<float>(value) / 32767.0f);
+            }
+            return out;
+        }
+        at = body + size + (size & 1);
+    }
+    throw std::runtime_error("The WAV file has no samples");
 }
 
 std::string base64_encode(std::span<const std::uint8_t> data){

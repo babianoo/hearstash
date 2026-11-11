@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,35 @@ int main(){
     CHECK(read(wav, 48, 2) == 0x8001);     // -32767
     CHECK(read(wav, 50, 2) == 32767);      // 2 is clipped to 1
     CHECK(read(wav, 52, 2) == 16384);
+
+    // Read back as written, clipped and rounded to 16 bits
+    const DecodedWav decoded = decode_wav(wav);
+    CHECK(decoded.rate == 48000);
+    CHECK(decoded.samples.size() == samples.size());
+    if (decoded.samples.size() == samples.size()){
+        CHECK(decoded.samples[0] == 0.0f);
+        CHECK(decoded.samples[1] == 1.0f);
+        CHECK(decoded.samples[2] == -1.0f);
+        CHECK(decoded.samples[3] == 1.0f);
+        CHECK(decoded.samples[4] > 0.4999f && decoded.samples[4] < 0.5001f);
+    }
+    // Not a WAV file, or cut off
+    const auto throws = [](std::vector<std::uint8_t> bytes){
+        try {
+            decode_wav(bytes);
+        } catch (const std::exception&){
+            return true;
+        }
+        return false;
+    };
+    CHECK(throws({}));
+    CHECK(throws({'R', 'I', 'F', 'F', 0, 0, 0, 0, 'A', 'V', 'I', ' '}));
+    std::vector<std::uint8_t> cut(wav.begin(), wav.end() - 4);
+    CHECK(throws(cut));
+    // Stereo isn't what encode_wav writes
+    std::vector<std::uint8_t> stereo = wav;
+    stereo[22] = 2;
+    CHECK(throws(stereo));
 
     if (failures == 0) std::puts("All media encoding tests passed");
     return failures;

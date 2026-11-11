@@ -170,3 +170,61 @@ std::vector<std::uint8_t> encode_jpeg(const Image& image, int quality){
     if (!ok) throw std::runtime_error(std::string("Couldn't save the picture as JPEG: ") + error.message);
     return bytes;
 }
+
+// Like compress(): only C-style locals, since longjmp skips destructors.
+// On success *pixels is malloc'd for the caller to free, *width x *height
+// RGB pixels. Returns false on failure, with error.message saying why.
+// volatile: a local changed after setjmp is only sure to keep its value
+// through longjmp if it is.
+static bool decompress(const std::uint8_t* data, size_t size, unsigned char** pixels, int* width, int* height,
+                       JpegError& error){
+    jpeg_decompress_struct cinfo;
+    unsigned char* volatile out = nullptr;
+    cinfo.err = jpeg_std_error(&error.manager);
+    error.manager.error_exit = jump_back;
+    if (setjmp(error.jump)){
+        jpeg_destroy_decompress(&cinfo);
+        std::free(out);
+        return false;
+    }
+
+    jpeg_create_decompress(&cinfo);
+    // libjpeg takes the input as non-const, but only reads it. The size is
+    // unsigned long in libjpeg-turbo and size_t in FLTK's libjpeg.
+    jpeg_mem_src(&cinfo, const_cast<std::uint8_t*>(data), static_cast<decltype(cinfo.src->bytes_in_buffer)>(size));
+    jpeg_read_header(&cinfo, TRUE);
+    // Greyscale comes out as RGB too
+    cinfo.out_color_space = JCS_RGB;
+    jpeg_start_decompress(&cinfo);
+
+    const size_t row_size = static_cast<size_t>(cinfo.output_width) * 3;
+    out = static_cast<unsigned char*>(std::malloc(row_size * cinfo.output_height));
+    if (!out){
+        jpeg_destroy_decompress(&cinfo);
+        std::snprintf(error.message, sizeof(error.message), "out of memory");
+        return false;
+    }
+    while (cinfo.output_scanline < cinfo.output_height){
+        JSAMPROW row = out + static_cast<size_t>(cinfo.output_scanline) * row_size;
+        jpeg_read_scanlines(&cinfo, &row, 1);
+    }
+    jpeg_finish_decompress(&cinfo);
+    *pixels = out;
+    *width = static_cast<int>(cinfo.output_width);
+    *height = static_cast<int>(cinfo.output_height);
+    jpeg_destroy_decompress(&cinfo);
+    return true;
+}
+
+Image decode_jpeg(std::span<const std::uint8_t> data){
+    if (data.empty()) throw std::runtime_error("Couldn't read the JPEG: it's empty");
+    unsigned char* pixels = nullptr;
+    int width = 0, height = 0;
+    JpegError error{};
+    if (!decompress(data.data(), data.size(), &pixels, &width, &height, error))
+        throw std::runtime_error(std::string("Couldn't read the JPEG: ") + error.message);
+    Image image{.width = width, .height = height, .rgb = {}};
+    image.rgb.assign(pixels, pixels + static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+    std::free(pixels);
+    return image;
+}

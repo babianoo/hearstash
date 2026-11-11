@@ -2,6 +2,7 @@
 // sample_ring_test.cpp.
 
 #include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 
@@ -102,6 +103,28 @@ static void test_jpeg(){
 
     bool threw = false;
     try { encode_jpeg({}, 85); } catch (const std::runtime_error&){ threw = true; }
+    CHECK(threw);
+
+    // Read back at the same size. A flat colour survives JPEG almost as is.
+    Image flat{.width = 40, .height = 30, .rgb = {}};
+    for (int i = 0; i < 40 * 30; ++i) flat.rgb.insert(flat.rgb.end(), {200, 100, 50});
+    const Image decoded = decode_jpeg(encode_jpeg(flat, 95));
+    CHECK(decoded.width == 40 && decoded.height == 30);
+    CHECK(decoded.rgb.size() == 40 * 30 * 3);
+    if (decoded.rgb.size() == 40 * 30 * 3)
+        CHECK(std::abs(decoded.rgb[0] - 200) <= 3 && std::abs(decoded.rgb[1] - 100) <= 3 && std::abs(decoded.rgb[2] - 50) <= 3);
+
+    threw = false;
+    try { decode_jpeg({}); } catch (const std::runtime_error&){ threw = true; }
+    CHECK(threw);
+    // Cut off after the header: libjpeg's error comes back as an exception
+    threw = false;
+    const std::vector<std::uint8_t> cut(jpeg.begin(), jpeg.begin() + 20);
+    try { decode_jpeg(cut); } catch (const std::runtime_error&){ threw = true; }
+    CHECK(threw);
+    threw = false;
+    const std::vector<std::uint8_t> junk{1, 2, 3, 4, 5};
+    try { decode_jpeg(junk); } catch (const std::runtime_error&){ threw = true; }
     CHECK(threw);
 }
 
