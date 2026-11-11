@@ -173,6 +173,7 @@ add_executable(hearstash
     src/ui/clipboard_input.cpp
     src/ui/crop_view.cpp
     src/ui/filter_bar.cpp
+    src/ui/fit_line.cpp
     src/ui/global_hotkey.cpp
     src/ui/history_store.cpp
     src/ui/history_table.cpp
