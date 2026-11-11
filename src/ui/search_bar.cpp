@@ -566,8 +566,10 @@ void SearchBar::on_api_btn(Fl_Widget* w, void* data){
     }
 
     const int index = static_cast<int>(picked - items) - FIRST_API;
+    if (index == current) return;
     self->current_api = static_cast<Api>(index);
     w->tooltip(API_NAMES[index]);
+    if (self->api_listener) self->api_listener();
 }
 
 // Search button and Enter in the text box both end up here.

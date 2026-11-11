@@ -47,8 +47,11 @@ public:
     std::string text() const;
     Api api() const { return current_api; }
     // Picks api in the "+" menu, e.g. to search again with the API used
-    // before
+    // before. Doesn't call the on_api_change listener.
     void set_api(Api api);
+    // listener is called after the user picks another API in the "+" menu,
+    // e.g. to remember it
+    void on_api_change(std::function<void()> listener){ api_listener = std::move(listener); }
 
     // Shrinks the bar to the text's first line, e.g. once a search starts,
     // so the results get the space. Clicking or editing the text shows all
@@ -98,6 +101,7 @@ private:
     Api current_api = Api::Jisho;
     RecordState current_record_state = RecordState::Idle;
     std::function<void()> record_listener;
+    std::function<void()> api_listener;
 
     // Height of a line of text. 0 until the bar is shown, since measuring
     // the font needs the display.

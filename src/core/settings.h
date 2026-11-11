@@ -4,13 +4,14 @@
 #include <map>
 #include <string>
 
+#include "core/api.h"
 #include "core/shortcut.h"
 
 // What the settings window changes and the rest of the app reads, saved
 // as JSON. Grouped like the window's categories, each group an object in
 // the file:
 //
-//   {"anki": {"deck": "Mining"}, "api": {"deepl_key": "..."},
+//   {"anki": {"deck": "Mining"}, "api": {"deepl_key": "...", "last_api": "jisho"},
 //    "buffer": {"seconds": 30}, "general": {"scroll_speed": 50},
 //    "history": {"capacity": 100},
 //    "screen_text": {"areas": {"fate.exe": {"x": 0.1, ...}}},
@@ -33,6 +34,9 @@ struct GeneralSettings {
 struct ApiSettings {
     // Empty when there's none
     std::string deepl_key;
+    // The API last picked on the main screen, which it starts with next
+    // time. Saved by its id, like in the history.
+    Api last_api = Api::Jisho;
 };
 
 // The History category

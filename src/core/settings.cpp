@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <optional>
 
 #include "core/atomic_write.h"
@@ -20,6 +21,18 @@ namespace fs = std::filesystem;
 // meaning, so load_settings can tell an older file apart and convert it.
 static constexpr int VERSION = 1;
 
+// Saved by its id, not its number, so reordering Api can't change what an
+// old file says. One it doesn't know (e.g. from a newer version) is
+// Jisho, rather than failing the whole file like a wrong type would.
+static void to_json(json& j, Api api){
+    j = API_IDS[static_cast<size_t>(api)];
+}
+
+static void from_json(const json& j, Api& api){
+    const auto found = std::ranges::find(API_IDS, j.get<std::string>());
+    api = found == std::end(API_IDS) ? Api::Jisho : static_cast<Api>(found - std::begin(API_IDS));
+}
+
 // to_json and from_json for each struct, which json(settings) and
 // get<Settings>() use. A field is only saved if it's listed here.
 // _WITH_DEFAULT: a key the file doesn't have keeps the field's default
@@ -27,7 +40,7 @@ static constexpr int VERSION = 1;
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AnkiSettings, deck, note_type, word_field, reading_field,
                                                 meaning_field, sentence_field, audio_field, picture_field,
                                                 picture_quality, crop_x, crop_y, crop_w, crop_h)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key, last_api)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds, shortcut)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralSettings, scroll_speed)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)

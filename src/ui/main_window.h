@@ -133,6 +133,8 @@ private:
 
     // Searches for what's in the search bar, with its API
     void search();
+    // Saves the search bar's API as the one to start with next time
+    void remember_api();
     // Puts query and api in the search bar, searches, and brings the
     // window to the front. For a search picked in the history window.
     void search_again(const std::string& query, Api api);

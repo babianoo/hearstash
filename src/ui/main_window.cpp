@@ -90,6 +90,9 @@ MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDown
     search_bar->on_input_hover([this](bool hovered){ results->show_scrollbar(!hovered); });
     // Record Input in the "+" menu, and the red "+" that stops it
     search_bar->on_record([this]{ on_record(); });
+    // Starts with the API picked last time, and remembers the one picked
+    search_bar->set_api(settings.get().api.last_api);
+    search_bar->on_api_change([this]{ remember_api(); });
 
     // Settings button in the top-right corner, and History left of it
     const int settings_x = win.w() - MARGIN - 25;
@@ -243,10 +246,17 @@ void MainWindow::on_search(Fl_Widget*, void* data){
 void MainWindow::search_again(const std::string& query, Api api){
     search_bar->set_text(query);
     search_bar->set_api(api);
+    remember_api();
     search();
     // In front of the history window, so the result can be seen. Wayland
     // doesn't let an app raise its own window, so there it stays behind.
     win.show();
+}
+
+void MainWindow::remember_api(){
+    const Api api = search_bar->api();
+    // update() saves the file, so not when nothing changed
+    if (settings.get().api.last_api != api) settings.update([api](Settings& s){ s.api.last_api = api; });
 }
 
 void MainWindow::search(){
