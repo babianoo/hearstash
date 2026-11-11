@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -50,8 +51,9 @@ public:
     CardWindow& operator=(const CardWindow&) = delete;
 
     // Shows draft in place of the card there was, and brings the window to
-    // the front
-    void open(CardDraft draft);
+    // the front. on_added, if there's one, is called once the card is in
+    // Anki.
+    void open(CardDraft draft, std::function<void()> on_added = {});
 
 private:
     SettingsStore& settings;
@@ -76,6 +78,7 @@ private:
 
     // What crop_view shows; it only borrows it
     CardDraft draft;
+    std::function<void()> on_added;
 
     // Static because FLTK callbacks are plain functions; the CardWindow
     // comes in through data.

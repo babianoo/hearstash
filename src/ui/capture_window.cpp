@@ -4,6 +4,7 @@
 #include <exception>
 #include <format>
 #include <span>
+#include <utility>
 
 // FLTK
 #include <FL/Fl.H>
@@ -102,8 +103,13 @@ CaptureWindow::~CaptureWindow(){
 }
 
 void CaptureWindow::open(std::vector<float> new_audio, int new_rate, int selection_seconds, Image new_screenshot,
-                         std::string new_screenshot_error){
+                         std::string new_screenshot_error, std::string new_title,
+                         std::function<void()> new_on_card_added, std::string transcript){
     stop_playing();
+    title = std::move(new_title);
+    // Borrowed by the window, so kept in a member
+    win.label(title.c_str());
+    on_card_added = std::move(new_on_card_added);
     // Its text would be of the capture there was
     cancel_transcription();
     screenshot = std::move(new_screenshot);
@@ -115,7 +121,14 @@ void CaptureWindow::open(std::vector<float> new_audio, int new_rate, int selecti
     const size_t selected = std::min(audio.size(), static_cast<size_t>(selection_seconds) * static_cast<size_t>(rate));
     waveform->selection(audio.size() - selected, audio.size());
     refresh_selection();
-    panels->show_note("Press Enter to turn the selection into text, or Space to hear it first.");
+    if (transcript.empty())
+        panels->show_note("Press Enter to turn the selection into text, or Space to hear it first.");
+    else {
+        // Enter transcribes it again, e.g. after changing the selection
+        panels->show_text(transcript);
+        panels->auto_translate(settings.get());
+    }
+    refresh_transcribe_button();
 
     prepare_model();
 
@@ -317,7 +330,7 @@ void CaptureWindow::add_to_anki(){
     draft.screenshot_error = screenshot_error;
 
     if (!card_win) card_win = std::make_unique<CardWindow>(settings);
-    card_win->open(std::move(draft));
+    card_win->open(std::move(draft), on_card_added);
 }
 
 void CaptureWindow::on_close(Fl_Widget*, void* data){
@@ -338,4 +351,5 @@ void CaptureWindow::on_close(Fl_Widget*, void* data){
     self->audio.shrink_to_fit();
     self->screenshot = {};
     self->panels->clear();
+    self->on_card_added = {};
 }

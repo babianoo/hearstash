@@ -82,6 +82,16 @@ struct BufferSettings {
     // The capture shortcut on Windows, as parse_shortcut reads it. Unused
     // on Linux, where the desktop owns the key.
     std::string shortcut = DEFAULT_SHORTCUT;
+    // The same for stashing a capture to look at later
+    std::string stash_shortcut = DEFAULT_STASH_SHORTCUT;
+    // Whether stashing plays a short chime, so it's heard to have worked
+    // without looking away from the video
+    bool stash_chime = true;
+    // Whether a stashed line's selection is transcribed as soon as it's
+    // stashed, so the stash shows what it says. Off by default: whisper
+    // then runs while the user is still watching, taking CPU, or the GPU
+    // and its memory from a game.
+    bool stash_transcribe = false;
 
     static constexpr int MIN_SECONDS = 10;
     static constexpr int MAX_SECONDS = 120;

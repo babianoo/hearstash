@@ -28,20 +28,22 @@ class Fl_Widget;
 struct WhisperModel;
 
 // The window the gear button opens: a sidebar of categories on the left,
-// and on the right the page of the selected one. The History page has how
-// many searches the history keeps, and a button that clears it. The API
-// page has the DeepL key and whether captures are translated by
-// themselves, and the Speech-to-Text page the whisper models,
-// a row each to download, delete and choose one, then the microphone to
-// record from. The Buffer page has the rolling buffer of what the computer
-// plays: whether it records, how long, whether it's recording now, and
-// the capture shortcut (on Linux, the command to bind to a key). The Anki page has the deck and
-// note type to add cards to, which field gets each part of a card, both
-// listed from Anki, and the picture's quality. The General page has the
-// mouse wheel's scroll speed.
+// and on the right the page of the selected one. The General page has the
+// DeepL key and whether captures are translated by themselves, how many
+// searches the history keeps with a button that clears it, and the mouse
+// wheel's scroll speed. The Speech-to-Text page has the whisper models, a
+// row each to download, delete and choose one, whether it runs on the GPU,
+// and the microphone to record from. The Recording page has the rolling
+// buffer of what the computer plays: whether it records, how long, whether
+// it's recording now; then what stashing a line does. The Shortcuts page
+// has the capture, screen capture and stash shortcuts (on Linux, the
+// commands to bind to keys). The Anki page has the deck and note type to
+// add cards to, which field gets each part of a card, both listed from
+// Anki, and the picture's quality.
 //
-// Changes go into the SettingsStore it was given as they're made, which
-// saves them: there's no Apply button.
+// Each setting is one short line; what it does in more detail is in its
+// tooltip. Changes go into the SettingsStore it was given as they're made,
+// which saves them: there's no Apply button.
 class SettingsWindow {
 public:
     // settings, history, downloader and capturer have to outlive the window
@@ -96,14 +98,15 @@ private:
     std::vector<Fl_Button*> categories;
     // All in the same spot, right of the sidebar; only one is shown
     std::vector<Fl_Group*> pages;
-    // On the General page. Applied like capacity_input.
+    // On the General page, like the history and the DeepL key. Applied
+    // like capacity_input.
     ClipboardInput* scroll_speed_input = nullptr;
-    // On the History page. How many searches there are is shown next to
+    // On the General page. How many searches there are is shown next to
     // the button that clears them.
     ClipboardInput* capacity_input = nullptr;
     Fl_Button* clear_history_btn = nullptr;
     Fl_Box* history_count = nullptr;
-    // On the API page. Starts hidden; key_visibility_btn toggles that.
+    // On the General page. Starts hidden; key_visibility_btn toggles that.
     ClipboardInput* key_input = nullptr;
     Fl_Button* key_visibility_btn = nullptr;
     // Also there: whether transcripts and screen text are translated
@@ -117,19 +120,20 @@ private:
     std::vector<std::string> mic_names;
     // Also there: whether whisper runs on the GPU
     Fl_Check_Button* gpu_check = nullptr;
-    // On the Buffer page. The numbers are applied like capacity_input's.
+    // On the Recording page. The numbers are applied like capacity_input's.
     Fl_Check_Button* buffer_enabled = nullptr;
     ClipboardInput* buffer_seconds_input = nullptr;
     ClipboardInput* selection_seconds_input = nullptr;
     // Recording, off, or why it can't record
     Fl_Box* buffer_status = nullptr;
-    // The capture shortcut, on Windows only
-    ShortcutInput* shortcut_input = nullptr;
-    // Why the capture shortcut can't be received, if it can't
-    Fl_Box* hotkey_status = nullptr;
-    // The same for the screen capture, on the Screen Text page
-    ShortcutInput* screen_shortcut_input = nullptr;
-    Fl_Box* screen_hotkey_status = nullptr;
+    // Each shortcut, by HotkeyAction, on the Shortcuts page. The boxes are
+    // on Windows only.
+    std::array<ShortcutInput*, HOTKEY_ACTION_COUNT> shortcut_inputs{};
+    // Why each shortcut can't be received, if it can't
+    std::array<Fl_Box*, HOTKEY_ACTION_COUNT> hotkey_statuses{};
+    // On the Recording page too
+    Fl_Check_Button* stash_chime_check = nullptr;
+    Fl_Check_Button* stash_transcribe_check = nullptr;
     // On the Anki page. The names are what each item of the dropdowns
     // saves; a field's dropdown starts with "(none)", which saves "".
     Fl_Choice* deck_choice = nullptr;
@@ -160,8 +164,10 @@ private:
     static void on_gpu_toggled(Fl_Widget* w, void* data);
     static void on_buffer_enabled(Fl_Widget* w, void* data);
     static void on_buffer_seconds(Fl_Widget* w, void* data);
+    // Any of shortcut_inputs
     static void on_shortcut(Fl_Widget* w, void* data);
-    static void on_screen_shortcut(Fl_Widget* w, void* data);
+    static void on_stash_chime(Fl_Widget* w, void* data);
+    static void on_stash_transcribe(Fl_Widget* w, void* data);
     static void on_deck_chosen(Fl_Widget* w, void* data);
     static void on_note_type_chosen(Fl_Widget* w, void* data);
     static void on_field_chosen(Fl_Widget* w, void* data);
@@ -171,15 +177,11 @@ private:
     // Add a page's settings to the current group, a page starting at x
     // that's w wide
     void add_general_settings(int x, int w);
-    void add_history_settings(int x, int w);
-    void add_api_settings(int x, int w);
     void add_speech_settings(int x, int w);
-    void add_buffer_settings(int x, int w);
-    void add_screen_text_settings(int x, int w);
-    // A shortcut's box (Windows) or command (Linux) under its label, from
-    // y, which is moved down past them, and a line for why it can't be
-    // received
-    void add_hotkey_settings(int left, int right, int& y, HotkeyAction action);
+    void add_recording_settings(int x, int w);
+    // A shortcut's box (Windows) or command (Linux) per HotkeyAction, each
+    // with a line for why it can't be received
+    void add_shortcut_settings(int x, int w);
     void add_anki_settings(int x, int w);
     void select(size_t i);
     // Shows how many searches there are, which changes with every search
@@ -200,7 +202,7 @@ private:
     void delete_model(const WhisperModel& model);
     // Lists the microphones plugged in now, with the saved one selected
     void refresh_microphones();
-    // Saves the numbers typed on the Buffer page. Does nothing if they
+    // Saves the numbers typed on the Recording page. Does nothing if they
     // haven't changed.
     void apply_buffer_seconds();
     // Shows whether the buffer is recording, which also changes when the

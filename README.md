@@ -125,14 +125,21 @@ ctest --test-dir build
 
 Everything is in **Settings**:
 
+- **General**: your DeepL key (free or Pro). It can also come from the
+  `DEEPL_API_KEY` environment variable, which is never saved. With a key,
+  transcripts and screen text are translated as soon as they're there;
+  untick **Translate automatically** to only translate with the Translate
+  button (Ctrl+T), e.g. to save the key's quota. Also how many searches the
+  history keeps, clearing it, and the mouse wheel's scroll speed.
 - **Speech-to-Text**: download a whisper model and choose it. `small` is a
   good start; `large-v3-turbo-q5_0` picks kanji much better but is slower.
   Downloads are checked against their SHA-1. It runs on the GPU unless you
   untick **Transcribe on the GPU**, e.g. to leave a game all the video
   memory. You can also choose the microphone here.
-- **Buffer**: turn the rolling buffer on or off, set how many seconds it
+- **Recording**: turn the rolling buffer on or off, set how many seconds it
   keeps (and how much of the end is selected when a capture opens), and
-  set the capture shortcut.
+  what stashing a line does.
+- **Shortcuts**: the capture, screen capture and stash shortcuts.
 - **Anki**: choose the deck and note type, and which field gets the word,
   reading, meaning, sentence, audio and picture. The note type is
   Hearstash's own unless you pick another: the sentence on the front, the
@@ -140,13 +147,8 @@ Everything is in **Settings**:
   added to Anki with your first card. With another note type, fields are
   guessed from their names. Needs Anki running with the
   [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on.
-- **API**: your DeepL key (free or Pro). It can also come from the
-  `DEEPL_API_KEY` environment variable, which is never saved. With a key,
-  transcripts and screen text are translated as soon as they're there;
-  untick **Translate transcripts and screen text automatically** to only
-  translate with the Translate button (Ctrl+T), e.g. to save the key's
-  quota.
-- **History**: how many searches to keep, and clearing them.
+
+Hover over a setting for more on what it does.
 
 ### The capture shortcuts
 
@@ -154,12 +156,11 @@ There are two: the capture of what the computer played, and the screen
 capture, which reads the text on the screen.
 
 - **Windows**: `Win+Alt+C` and `Win+Alt+X` by default. Change them in
-  Settings > Buffer and Settings > Screen Text by pressing the new keys in
-  their box.
+  Settings > Shortcuts by pressing the new keys in their box.
 - **Linux**: Wayland doesn't let apps grab keys, so bind keys in your
   desktop to `hearstash --capture` and `hearstash --read-screen`, which
-  tell the running app to capture. Settings > Buffer and Settings > Screen
-  Text show the commands with the right path. For Hyprland:
+  tell the running app to capture. Settings > Shortcuts shows the
+  commands with the right path. For Hyprland:
 
   ```
   bind = SUPER, A, exec, /path/to/hearstash --capture
@@ -239,8 +240,8 @@ The app listens to everything your computer plays, so:
   your own Anki.
 - The one exception: with a DeepL key, each transcript and each text read
   on the screen is sent to DeepL to translate, without asking. Settings >
-  API turns that off.
-- Turning the buffer off in Settings > Buffer stops it recording.
+  General turns that off.
+- Turning the buffer off in Settings > Recording stops it recording.
 
 ## Known gaps
 

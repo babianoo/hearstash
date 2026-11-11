@@ -94,8 +94,9 @@ CardWindow::CardWindow(SettingsStore& settings) : settings(settings){
     win.callback(on_close, this);
 }
 
-void CardWindow::open(CardDraft new_draft){
+void CardWindow::open(CardDraft new_draft, std::function<void()> new_on_added){
     draft = std::move(new_draft);
+    on_added = std::move(new_on_added);
     word_input->value(draft.word.c_str());
     reading_input->value(draft.reading.c_str());
     meaning_input->value(draft.meaning.c_str());
@@ -196,6 +197,9 @@ void CardWindow::add(){
         return;
     }
 
+    // Before close() forgets it. A copy: what it calls may open this
+    // window again with another card, replacing on_added.
+    if (const std::function<void()> added = on_added) added();
     close();
 }
 
@@ -210,4 +214,5 @@ void CardWindow::close(){
     // Not kept any longer than it's needed
     crop_view->image(nullptr);
     draft = {};
+    on_added = {};
 }

@@ -24,6 +24,8 @@ struct Shortcut {
 inline constexpr const char* DEFAULT_SHORTCUT = "Win+Alt+C";
 // The same for the screen capture, next to it
 inline constexpr const char* DEFAULT_SCREEN_SHORTCUT = "Win+Alt+X";
+// And for stashing a line for later
+inline constexpr const char* DEFAULT_STASH_SHORTCUT = "Win+Alt+Z";
 
 // Why shortcut can't be one, e.g. "Add Ctrl, Alt or Win to it". Empty if
 // it can. A shortcut takes its keys from every app, so a key that types

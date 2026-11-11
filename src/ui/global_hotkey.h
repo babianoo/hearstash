@@ -1,11 +1,19 @@
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <string>
 
-// What a global shortcut does: a capture of what the computer played, or
-// one of the text on the screen
-enum class HotkeyAction { Capture, ReadScreen };
+// What a global shortcut does: a capture of what the computer played, one
+// of the text on the screen, or a capture saved for later without opening
+enum class HotkeyAction { Capture, ReadScreen, Stash };
+
+// How many there are, e.g. to size an array indexed by them
+inline constexpr size_t HOTKEY_ACTION_COUNT = 3;
+
+// Every action, in order
+inline constexpr HotkeyAction HOTKEY_ACTIONS[HOTKEY_ACTION_COUNT] = {HotkeyAction::Capture, HotkeyAction::ReadScreen,
+                                                                     HotkeyAction::Stash};
 
 // The shortcuts that take a capture, pressed in any app: mpv, a
 // fullscreen browser, a game. One for each HotkeyAction.
@@ -16,6 +24,7 @@ enum class HotkeyAction { Capture, ReadScreen };
 //
 //   bind = SUPER, A, exec, /path/to/hearstash --capture
 //   bind = SUPER, S, exec, /path/to/hearstash --read-screen
+//   bind = SUPER, Z, exec, /path/to/hearstash --stash
 //
 // That command passes the press on to the running app through a socket in
 // $XDG_RUNTIME_DIR, which only the user can open.
@@ -50,7 +59,7 @@ private:
     // need windows.h
     void* window = nullptr;
     // Whether a shortcut is registered on it for each action
-    bool registered[2] = {false, false};
+    bool registered[HOTKEY_ACTION_COUNT] = {};
 #else
     // The socket presses arrive on; -1 if none
     int listener = -1;
@@ -66,9 +75,13 @@ private:
 // starting
 inline constexpr const char* CAPTURE_ARG = "--capture";
 inline constexpr const char* READ_SCREEN_ARG = "--read-screen";
+inline constexpr const char* STASH_ARG = "--stash";
+
+// The argument that sends a press for action
+const char* hotkey_arg(HotkeyAction action);
 
 // Sends a press for action to the running app, for main() when it's
-// started with CAPTURE_ARG or READ_SCREEN_ARG. Throws std::runtime_error
+// started with one of the arguments above. Throws std::runtime_error
 // if no copy of the app is running.
 void send_hotkey_press(HotkeyAction action);
 

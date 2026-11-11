@@ -27,18 +27,22 @@ class SettingsStore;
 class SettingsWindow;
 class SharedTranscriber;
 class SmoothScroll;
+class StashStore;
+class StashWindow;
 class WrappedText;
+class Fl_Button;
 class Fl_Widget;
 struct TextSpan;
 
 class MainWindow {
 public:
-    // settings, history, downloader, capturer and transcriber have to
-    // outlive the window
+    // settings, history, downloader, capturer, transcriber and stash have
+    // to outlive the window
     MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader, Capturer& capturer,
-               SharedTranscriber& transcriber);
-    // Defined in main_window.cpp, where SettingsWindow, HistoryWindow and
-    // Recorder are complete types, which unique_ptr needs to delete them.
+               SharedTranscriber& transcriber, StashStore& stash);
+    // Defined in main_window.cpp, where SettingsWindow, HistoryWindow,
+    // StashWindow and Recorder are complete types, which unique_ptr needs
+    // to delete them. Stops listening to the stash.
     // Stops a transcription still running and waits for it, or for the
     // model to finish loading.
     ~MainWindow();
@@ -94,6 +98,15 @@ private:
     // Created on the first click of the history button, for the same
     // reason
     std::unique_ptr<HistoryWindow> history_win;
+    // Stashed lines, which the stash button counts
+    StashStore& stash;
+    // From stash.add_listener
+    int stash_listener = -1;
+    // Its child of win, and its tooltip, which it only borrows
+    Fl_Button* stash_btn = nullptr;
+    std::string stash_tooltip;
+    // Created on the first click of the stash button, for the same reason
+    std::unique_ptr<StashWindow> stash_win;
 
     // Bumped on every search. Only the latest search's result is shown,
     // so a slow earlier search can't overwrite a newer one.
@@ -120,6 +133,7 @@ private:
     static void on_search(Fl_Widget* w, void* data);
     static void on_settings(Fl_Widget* w, void* data);
     static void on_history(Fl_Widget* w, void* data);
+    static void on_stash(Fl_Widget* w, void* data);
     // The window's close button: quits the app. Escape does nothing.
     static void on_close(Fl_Widget* w, void* data);
     // Runs on the UI thread, called by Fl::awake() from a search thread
@@ -147,6 +161,9 @@ private:
     // Created on first use, for the same reason as settings_win
     SettingsWindow& settings_window();
     HistoryWindow& history_window();
+    StashWindow& stash_window();
+    // Shows how many lines are stashed on the stash button
+    void refresh_stash_button();
     void move_bar_to_top();
     // Fills the space under the search bar, which grows with long text
     void place_results();

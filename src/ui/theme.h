@@ -17,6 +17,6 @@ inline const Fl_Color ACCENT = fl_rgb_color(50, 110, 240);
 // can still change (e.g. with -bg) before the first window is created.
 Fl_Color sidebar_color();
 
-// Sets the FLTK scheme.
+// Sets the FLTK scheme and the tooltips' color.
 // Call once in main(), before any window is created.
 void init_theme();

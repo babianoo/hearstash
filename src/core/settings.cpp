@@ -41,7 +41,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AnkiSettings, deck, note_type, w
                                                 meaning_field, sentence_field, audio_field, picture_field,
                                                 picture_quality, crop_x, crop_y, crop_w, crop_h)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, auto_translate, deepl_key, last_api)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds, shortcut)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds, shortcut,
+                                                stash_shortcut, stash_chime, stash_transcribe)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralSettings, scroll_speed)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpeechSettings, whisper_model, input_device, use_gpu)
@@ -92,6 +93,8 @@ void sanitize(Settings& settings){
     // can't be read is replaced, so there's always one.
     const std::optional<Shortcut> shortcut = parse_shortcut(buffer.shortcut);
     buffer.shortcut = shortcut ? format_shortcut(*shortcut) : DEFAULT_SHORTCUT;
+    const std::optional<Shortcut> stash_shortcut = parse_shortcut(buffer.stash_shortcut);
+    buffer.stash_shortcut = stash_shortcut ? format_shortcut(*stash_shortcut) : DEFAULT_STASH_SHORTCUT;
     std::string& screen_shortcut = settings.screen_text.shortcut;
     const std::optional<Shortcut> parsed_screen = parse_shortcut(screen_shortcut);
     screen_shortcut = parsed_screen ? format_shortcut(*parsed_screen) : DEFAULT_SCREEN_SHORTCUT;

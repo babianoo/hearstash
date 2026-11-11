@@ -503,6 +503,63 @@ screenshots from a second game would check that this holds.
   much shorter than their neighbours, or better, keep them as the
   reading.
 
+### 9. Stash a line for later
+
+From the midterm interviews: an N2 learner lets new words go while
+watching, and only looks up ones heard several times "later after
+finishing my episode". Stopping the show is what they avoid. For them a
+capture has to wait until the episode is over, and the buffer is gone by
+then.
+
+What the user does:
+
+1. While watching, they press the **stash shortcut** (Linux:
+   `hearstash --stash`; Windows: Win+Alt+Z by default). No window opens
+   and nothing takes the focus. A short chime says it was kept; a lower
+   one that it wasn't, e.g. with the buffer off.
+2. After the episode, the main window's stash button shows how many are
+   waiting. It opens the **stash window**: one row per line, newest
+   first, with the time, the app it was heard in, its length and a
+   thumbnail of the screenshot.
+3. Opening one (double-click or Enter) shows it in the capture window
+   with its own screenshot, exactly as a capture would have, so picking
+   the line, transcribing, looking up and adding a card all work as
+   before.
+4. Adding a card from it removes it from the stash. So do Delete (one)
+   and Clear (all) in the stash window, for lines only looked up.
+
+How it's kept: the **whole buffer**, not only the last few seconds,
+since the line isn't picked yet. Each stashed line is a folder in
+`state_dir()/stash/`, named after the time it was taken:
+
+    stash/20261111-210433/
+      audio.wav        the buffer: 48 kHz mono, 16-bit
+      screenshot.jpg   quality 95, since a card encodes it again
+      thumbnail.jpg    for the list
+      stash.json       time, app, rate, selection_seconds,
+                       screenshot_error; written last, so a folder
+                       without it is half-written and ignored
+
+30 s of audio is about 2.9 MB, 120 s about 11.5 MB, so the window shows
+how much space the stash takes. Nothing is deleted without the user
+asking.
+
+The chime plays through the same output the buffer records, so it ends
+up in the buffer for the next 30 s; it's short and quiet, and comes
+after the line. On GNOME the screenshot portal may show a dialog, which
+interrupts; not solved yet.
+
+**Transcribing when stashed** (Settings > Stash, off by default): right
+after a line is saved, its selection (the end the capture window would
+select) goes to whisper in the background, on the shared model, so the
+capture window and the search bar wait their turn behind it. The
+transcript is added to stash.json, the list shows it (or "Transcribing...",
+or why it couldn't be), and opening the line shows it at once; Enter
+transcribes again, e.g. after changing the selection. Off by default
+because whisper then runs while the user is still watching: CPU, or the
+GPU and its memory, taken from a game. Lines stashed while it was off
+stay untranscribed.
+
 ## Settings to add
 
 To `src/core/settings.h`, as new categories in the settings window:
@@ -519,7 +576,8 @@ The app records everything the computer plays, all the time, so this has
 to be clear and safe, and it's a point worth making in the pitch:
 
 - Audio stays in memory and is never written to disk, except a clip the
-  user adds to a card.
+  user adds to a card, and a line they stash for later (phase 9), which
+  stays on disk until a card is made from it or they delete it.
 - A visible sign that it's listening (tray icon), and a way to pause it.
   (Pausing is the on/off setting. The tray icon is still to do, with the
   rest of running in the background.)

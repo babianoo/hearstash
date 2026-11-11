@@ -1,9 +1,11 @@
 #include "ui/main_window.h"
 
+#include <algorithm>
 #include <exception>
 #include <format>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -12,12 +14,14 @@
 #include <FL/Fl.H>
 #include <FL/fl_ask.H>
 #include <FL/Fl_Button.H>
+#include <FL/fl_draw.H>
 #include <FL/Fl_SVG_Image.H>
 
 #include "core/deepl.h"
 #include "core/recorder.h"
 #include "core/settings.h"
 #include "core/whisper_models.h"
+#include "ui/capturer.h"
 #include "ui/clipboard.h"
 #include "ui/history_store.h"
 #include "ui/history_window.h"
@@ -27,6 +31,8 @@
 #include "ui/settings_store.h"
 #include "ui/settings_window.h"
 #include "ui/shared_transcriber.h"
+#include "ui/stash_store.h"
+#include "ui/stash_window.h"
 #include "ui/theme.h"
 #include "ui/smooth_scroll.h"
 #include "ui/wrapped_text.h"
@@ -40,8 +46,39 @@ static constexpr double RECORD_TICK = 0.1;
 
 // A round button with an icon, like Settings, at x along the top. As tall
 // as the search bar, so it lines up with it once the bar moves to the top.
-static Fl_Button* icon_button(int x, const char* svg, const char* tooltip){
-    Fl_Button* btn = new Fl_Button(x, MARGIN, PILL_H, PILL_H);
+// A round icon button with a count in its corner, like a mail app's
+// unread badge. Nothing is drawn while the count is 0.
+class CountButton : public Fl_Button {
+public:
+    CountButton(int x, int y, int w, int h) : Fl_Button(x, y, w, h){}
+
+    void count(size_t n){
+        if (n == count_) return;
+        count_ = n;
+        redraw();
+    }
+
+protected:
+    void draw() override {
+        Fl_Button::draw();
+        if (count_ == 0) return;
+        const std::string text = count_ > 99 ? "99+" : std::to_string(count_);
+        fl_font(FL_HELVETICA_BOLD, 10);
+        // Inside the button, so it's redrawn with it
+        const int badge_h = 14;
+        const int badge_w = std::max(badge_h, static_cast<int>(fl_width(text.c_str())) + 6);
+        const int bx = x() + w() - badge_w, by = y();
+        fl_draw_box(FL_RFLAT_BOX, bx, by, badge_w, badge_h, ACCENT);
+        fl_color(FL_WHITE);
+        fl_draw(text.c_str(), bx, by, badge_w, badge_h, FL_ALIGN_CENTER);
+    }
+
+private:
+    size_t count_ = 0;
+};
+
+static Fl_Button* icon_button(int x, const char* svg, const char* tooltip, bool counted = false){
+    Fl_Button* btn = counted ? new CountButton(x, MARGIN, PILL_H, PILL_H) : new Fl_Button(x, MARGIN, PILL_H, PILL_H);
     // Same box as the Search button; on a square button it's a circle.
     // Pressed it becomes FL_ROUND_DOWN_BOX, which has the same shape.
     // (FL_ROUNDED_BOX's pressed look is a square, whose corners stay
@@ -58,8 +95,9 @@ static Fl_Button* icon_button(int x, const char* svg, const char* tooltip){
 }
 
 MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDownloader& downloader,
-                       Capturer& capturer, SharedTranscriber& transcriber)
-    : settings(settings), history(history), downloader(downloader), capturer(capturer), transcriber(transcriber){
+                       Capturer& capturer, SharedTranscriber& transcriber, StashStore& stash)
+    : settings(settings), history(history), downloader(downloader), capturer(capturer), stash(stash),
+      transcriber(transcriber){
     // win is constructed (as a member) before this body runs, so it's
     // the current group here: widgets created below are added to it.
 
@@ -94,10 +132,15 @@ MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDown
     search_bar->set_api(settings.get().api.last_api);
     search_bar->on_api_change([this]{ remember_api(); });
 
-    // Settings button in the top-right corner, and History left of it
+    // Settings button in the top-right corner, History left of it, then
+    // the stash
     const int settings_x = win.w() - MARGIN - 25;
     icon_button(settings_x, ICON_SETTINGS, "Settings")->callback(on_settings, this);
     icon_button(settings_x - ICON_BTN_GAP - PILL_H, ICON_HISTORY, "History")->callback(on_history, this);
+    stash_btn = icon_button(settings_x - 2 * (ICON_BTN_GAP + PILL_H), ICON_STASH, "Stash", true);
+    stash_btn->callback(on_stash, this);
+    stash_listener = stash.add_listener([this]{ refresh_stash_button(); });
+    refresh_stash_button();
 
     // No resizable() on purpose: FLTK then keeps the window at a fixed size.
     win.end();
@@ -106,6 +149,7 @@ MainWindow::MainWindow(SettingsStore& settings, HistoryStore& history, ModelDown
 
 MainWindow::~MainWindow(){
     Fl::remove_timeout(on_record_tick, this);
+    stash.remove_listener(stash_listener);
     // The members then go in reverse order: transcription_thread is
     // stopped and joined, and recorder stops a recording still running
 }
@@ -234,6 +278,22 @@ HistoryWindow& MainWindow::history_window(){
     return *history_win;
 }
 
+StashWindow& MainWindow::stash_window(){
+    if (!stash_win) stash_win = std::make_unique<StashWindow>(stash, [this](const StashEntry& entry){
+            capturer.open_stashed(entry);
+        });
+    return *stash_win;
+}
+
+void MainWindow::refresh_stash_button(){
+    const size_t count = stash.entries().size();
+    static_cast<CountButton*>(stash_btn)->count(count);
+    // Kept by the button as given, so it's copied into a member
+    stash_tooltip = count == 0 ? "Stash: lines saved to look at later" :
+                    std::format("Stash: {} {} to look at", count, count == 1 ? "line" : "lines");
+    stash_btn->tooltip(stash_tooltip.c_str());
+}
+
 void MainWindow::show(int argc, char** argv){
     win.show(argc, argv);
     clipboard_init();    // Needs the display, which show() opens
@@ -342,6 +402,10 @@ void MainWindow::on_settings(Fl_Widget*, void* data){
 
 void MainWindow::on_history(Fl_Widget*, void* data){
     static_cast<MainWindow*>(data)->history_window().show();
+}
+
+void MainWindow::on_stash(Fl_Widget*, void* data){
+    static_cast<MainWindow*>(data)->stash_window().show();
 }
 
 void MainWindow::on_search_done(void* data){

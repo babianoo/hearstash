@@ -23,19 +23,22 @@
 #include "ui/settings_store.h"
 #include "ui/shared_transcriber.h"
 #include "ui/smooth_scroll.h"
+#include "ui/stash_store.h"
 
 int main(int argc, char** argv){
     // Run by the key the user bound to it: passes the press on to the app
     // that's running, and quits
-    if (argc == 2 && (std::string_view(argv[1]) == CAPTURE_ARG || std::string_view(argv[1]) == READ_SCREEN_ARG)){
-        try {
-            send_hotkey_press(std::string_view(argv[1]) == CAPTURE_ARG ? HotkeyAction::Capture : HotkeyAction::ReadScreen);
-            return 0;
-        } catch (const std::exception& e){
-            std::cerr << "Couldn't capture: " << e.what() << '\n';
-            return 1;
+    if (argc == 2)
+        for (HotkeyAction action : HOTKEY_ACTIONS){
+            if (std::string_view(argv[1]) != hotkey_arg(action)) continue;
+            try {
+                send_hotkey_press(action);
+                return 0;
+            } catch (const std::exception& e){
+                std::cerr << "Couldn't capture: " << e.what() << '\n';
+                return 1;
+            }
         }
-    }
 
     // Before any thread exists: searches and downloads run on their own
     // threads
@@ -74,11 +77,13 @@ int main(int argc, char** argv){
     // The same goes for it. The whisper model the main window and the
     // capture window both transcribe with.
     SharedTranscriber transcriber;
+    // The same goes for it. The lines stashed to look at later.
+    StashStore stash(state_dir() / "stash");
     // The same goes for it. Keeps the last seconds of what the computer
     // plays from now until the app quits.
-    Capturer capturer(settings, transcriber);
+    Capturer capturer(settings, transcriber, stash);
 
-    MainWindow main_win(settings, history, downloader, capturer, transcriber);
+    MainWindow main_win(settings, history, downloader, capturer, transcriber, stash);
     main_win.show(argc, argv);
 
     return Fl::run();

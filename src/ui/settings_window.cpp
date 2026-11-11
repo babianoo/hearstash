@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <exception>
 #include <format>
+#include <initializer_list>
 #include <iterator>
 #include <string>
 
@@ -34,12 +35,11 @@
 #include "ui/shortcut_input.h"
 #include "ui/theme.h"
 
-// Same categories as japanese-helper, in sidebar order, then the rolling
-// buffer's and Anki's
-static constexpr const char* CATEGORY_NAMES[] = {"General", "History", "API", "Speech-to-Text", "Buffer",
-                                                  "Screen Text", "Anki"};
+// In sidebar order. General has the DeepL key, the history and scrolling;
+// Recording the rolling buffer and stashing; Shortcuts all three hotkeys.
+static constexpr const char* CATEGORY_NAMES[] = {"General", "Speech-to-Text", "Recording", "Shortcuts", "Anki"};
 // Indexes into CATEGORY_NAMES
-enum Category : size_t { GENERAL, HISTORY, API, SPEECH_TO_TEXT, BUFFER, SCREEN_TEXT, ANKI };
+enum Category : size_t { GENERAL, SPEECH_TO_TEXT, RECORDING, SHORTCUTS, ANKI };
 
 static constexpr int SIDEBAR_W = 160;
 static constexpr int CATEGORY_H = 36;
@@ -54,14 +54,51 @@ static constexpr int MODEL_BTN_W = 80, MODEL_BTN_H = 26;
 // The size or progress column, left of the button
 static constexpr int MODEL_STATUS_W = 110;
 
-// On the History page: the box for how many searches to keep, wide
+// On the General page: the box for how many searches to keep, wide
 // enough for 1000, and the button that clears them
 static constexpr int CAPACITY_W = 80;
 static constexpr int CLEAR_BTN_W = 120;
 
-// On the Buffer page: the capture shortcut's box, wide enough for
+// On the Shortcuts page: a shortcut's box, wide enough for
 // Win+Ctrl+Alt+Shift+PageDown
 static constexpr int SHORTCUT_W = 220;
+
+// Most settings are a row: a label on the left, LABEL_W wide, and its box
+// right of it. Rows are ROW_H apart, groups of them GROUP_GAP more.
+static constexpr int LABEL_W = 120;
+static constexpr int ROW_H = PILL_H + 6;
+static constexpr int GROUP_GAP = 14;
+
+// A row's label. What a setting does in more detail goes in a tooltip, on
+// the label and its box, rather than a line of its own under them.
+static Fl_Box* row_label(int left, int y, const char* text){
+    Fl_Box* label = new Fl_Box(left, y, LABEL_W, PILL_H, text);
+    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    return label;
+}
+
+static void set_tip(std::initializer_list<Fl_Widget*> widgets, const std::string& tip){
+    for (Fl_Widget* w : widgets) w->copy_tooltip(tip.c_str());
+}
+
+// A small grey line, e.g. a status under a setting
+static Fl_Box* dim_line(int x, int y, int w, int h, const char* text = nullptr){
+    Fl_Box* line = new Fl_Box(x, y, w, h, text);
+    line->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    line->labelsize(12);
+    line->labelcolor(DIM);
+    return line;
+}
+
+// A box for a whole number, applied on Enter or leaving it: on every
+// keystroke, typing 150 would go through 1, which would e.g. delete all but
+// the newest searches
+static ClipboardInput* number_input(int x, int y){
+    auto* input = new ClipboardInput(x, y, CAPACITY_W, PILL_H);
+    input->type(FL_INT_INPUT);
+    input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
+    return input;
+}
 
 // Replaces choice's items with labels, and selects item selected
 static void set_items(Fl_Choice& choice, const std::vector<std::string>& labels, int selected){
@@ -111,11 +148,9 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
     for (size_t i = 0; i < std::size(CATEGORY_NAMES); ++i){
         Fl_Group* page = new Fl_Group(page_x, 0, page_w, win.h());
         if (i == GENERAL) add_general_settings(page_x, page_w);
-        if (i == HISTORY) add_history_settings(page_x, page_w);
-        if (i == API) add_api_settings(page_x, page_w);
         if (i == SPEECH_TO_TEXT) add_speech_settings(page_x, page_w);
-        if (i == BUFFER) add_buffer_settings(page_x, page_w);
-        if (i == SCREEN_TEXT) add_screen_text_settings(page_x, page_w);
+        if (i == RECORDING) add_recording_settings(page_x, page_w);
+        if (i == SHORTCUTS) add_shortcut_settings(page_x, page_w);
         if (i == ANKI) add_anki_settings(page_x, page_w);
 
         page->end();
@@ -150,30 +185,68 @@ SettingsWindow::~SettingsWindow(){
     settings.remove_listener(settings_listener);
 }
 
-// The mouse wheel's scroll speed: a label, then the number with a note
-// right of it
+// The DeepL key with an eye button on its right, and whether captures are
+// translated by themselves. Then how many searches to keep, with the
+// button that clears them and how many there are. Then the mouse wheel's
+// scroll speed.
 void SettingsWindow::add_general_settings(int x, int w){
     const int left = x + MARGIN, right = x + w - MARGIN;
-    // Lines up with the first category in the sidebar, like the API page
-    int y = MARGIN + (CATEGORY_H - 20) / 2;
+    const int box_x = left + LABEL_W;
+    // Lines up with the first category in the sidebar
+    int y = MARGIN + (CATEGORY_H - PILL_H) / 2;
 
-    Fl_Box* label = new Fl_Box(left, y, right - left, 20, "Scroll speed");
-    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    y += label->h() + 4;
+    Fl_Box* key_label = row_label(left, y, "DeepL API key");
+    // Same height as the search bar; the button is square, like the gear
+    const int eye_x = right - PILL_H;
+    key_input = new ClipboardInput(box_x, y, eye_x - 6 - box_x, PILL_H);
+    key_input->value(settings.get().api.deepl_key.c_str());
+    // On every keystroke, so the key is in use as soon as it's typed
+    key_input->when(FL_WHEN_CHANGED);
+    key_input->callback(on_key_changed, this);
+    set_tip({key_label, key_input}, "If empty, the DEEPL_API_KEY environment variable is used.");
 
-    scroll_speed_input = new ClipboardInput(left, y, CAPACITY_W, PILL_H);
-    scroll_speed_input->type(FL_INT_INPUT);
+    key_visibility_btn = new Fl_Button(eye_x, y, PILL_H, PILL_H);
+    key_visibility_btn->box(FL_ROUND_UP_BOX);    // Round, like the gear
+    key_visibility_btn->clear_visible_focus();   // No dotted focus ring after a click
+    key_visibility_btn->callback(on_key_visibility, this);
+    set_key_hidden(true);
+    y += ROW_H;
+
+    auto_translate_check = new Fl_Check_Button(box_x, y, right - box_x, PILL_H, "Translate automatically");
+    auto_translate_check->value(settings.get().api.auto_translate);
+    auto_translate_check->clear_visible_focus();
+    auto_translate_check->callback(on_auto_translate, this);
+    set_tip({auto_translate_check}, "Sends each transcript and screen text to DeepL as soon as it's there, which "
+                                    "counts towards the key's quota.\nOff, only Translate (Ctrl+T) does.");
+    y += ROW_H + GROUP_GAP;
+
+    Fl_Box* capacity_label = row_label(left, y, "History size");
+    capacity_input = number_input(box_x, y);
+    capacity_input->value(settings.get().history.capacity);
+    // Also when the page or window is left: see apply_capacity()
+    capacity_input->callback(on_capacity, this);
+    set_tip({capacity_label, capacity_input},
+            std::format("How many searches to keep, from {} to {}. Lowering it deletes the oldest ones over it.",
+                        HistorySettings::MIN_CAPACITY, HistorySettings::MAX_CAPACITY));
+
+    const int clear_x = box_x + CAPACITY_W + 8;
+    clear_history_btn = new Fl_Button(clear_x, y + (PILL_H - MODEL_BTN_H) / 2, CLEAR_BTN_W, MODEL_BTN_H,
+                                      "Clear History");
+    clear_history_btn->box(FL_ROUND_UP_BOX);
+    clear_history_btn->clear_visible_focus();
+    clear_history_btn->callback(on_clear_history, this);
+
+    const int count_x = clear_x + CLEAR_BTN_W + 8;
+    history_count = dim_line(count_x, y, right - count_x, PILL_H);
+    y += ROW_H + GROUP_GAP;
+
+    Fl_Box* speed_label = row_label(left, y, "Scroll speed");
+    scroll_speed_input = number_input(box_x, y);
     scroll_speed_input->value(settings.get().general.scroll_speed);
-    // Like the capacity, only on Enter or leaving the box
-    scroll_speed_input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
     scroll_speed_input->callback(on_scroll_speed, this);
-
-    Fl_Box* note = new Fl_Box(left + CAPACITY_W + 10, y, right - left - CAPACITY_W - 10, PILL_H);
-    note->copy_label(std::format("Pixels per wheel notch, from {} to {}.",
-                                 GeneralSettings::MIN_SCROLL_SPEED, GeneralSettings::MAX_SCROLL_SPEED).c_str());
-    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-    note->labelsize(12);
-    note->labelcolor(DIM);
+    set_tip({speed_label, scroll_speed_input},
+            std::format("Pixels per mouse wheel notch, from {} to {}.",
+                        GeneralSettings::MIN_SCROLL_SPEED, GeneralSettings::MAX_SCROLL_SPEED));
 }
 
 void SettingsWindow::on_scroll_speed(Fl_Widget*, void* data){
@@ -193,50 +266,9 @@ void SettingsWindow::apply_scroll_speed(){
     scroll_speed_input->value(settings.get().general.scroll_speed);
 }
 
-// How many searches to keep: a label, the number, and a note on what
-// lowering it does. Under them the button that clears the history, with
-// how many searches there are next to it.
-void SettingsWindow::add_history_settings(int x, int w){
-    const int left = x + MARGIN, right = x + w - MARGIN;
-    // Lines up with the first category in the sidebar, like the API page
-    int y = MARGIN + (CATEGORY_H - 20) / 2;
-
-    Fl_Box* label = new Fl_Box(left, y, right - left, 20, "Searches to keep");
-    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    y += label->h() + 4;
-
-    capacity_input = new ClipboardInput(left, y, CAPACITY_W, PILL_H);
-    capacity_input->type(FL_INT_INPUT);
-    capacity_input->value(settings.get().history.capacity);
-    // Not on every keystroke: typing 150 goes through 1, which would
-    // delete all but the newest 10 searches. Only on Enter or leaving the
-    // box, and when the page or window is left: see apply_capacity().
-    capacity_input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
-    capacity_input->callback(on_capacity, this);
-    y += PILL_H + 6;
-
-    Fl_Box* note = new Fl_Box(left, y, right - left, 20);
-    note->copy_label(std::format("From {} to {}. Lowering it deletes the oldest searches over it.",
-                                 HistorySettings::MIN_CAPACITY, HistorySettings::MAX_CAPACITY).c_str());
-    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    note->labelsize(12);
-    note->labelcolor(DIM);
-    y += note->h() + 2 * MARGIN;
-
-    clear_history_btn = new Fl_Button(left, y, CLEAR_BTN_W, MODEL_BTN_H, "Clear History");
-    clear_history_btn->box(FL_ROUND_UP_BOX);
-    clear_history_btn->clear_visible_focus();
-    clear_history_btn->callback(on_clear_history, this);
-
-    history_count = new Fl_Box(left + CLEAR_BTN_W + 10, y, right - left - CLEAR_BTN_W - 10, MODEL_BTN_H);
-    history_count->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    history_count->labelcolor(DIM);
-}
-
 void SettingsWindow::refresh_history(){
     const size_t count = history.entries().size();
-    if (count == 0) history_count->copy_label("The history is empty.");
-    else history_count->copy_label(std::format("{} search{} in the history", count, count == 1 ? "" : "es").c_str());
+    history_count->copy_label(std::format("{} saved", count).c_str());
     if (count == 0) clear_history_btn->deactivate();
     else clear_history_btn->activate();
 }
@@ -267,8 +299,8 @@ void SettingsWindow::on_close(Fl_Widget*, void* data){
     self->apply_capacity();
     self->apply_buffer_seconds();
     self->apply_quality();
-    if (self->shortcut_input) self->shortcut_input->stop_waiting();
-    if (self->screen_shortcut_input) self->screen_shortcut_input->stop_waiting();
+    for (ShortcutInput* input : self->shortcut_inputs)
+        if (input) input->stop_waiting();
     self->win.hide();
 }
 
@@ -282,64 +314,22 @@ void SettingsWindow::on_clear_history(Fl_Widget*, void* data){
     self->history.clear();
 }
 
-// DeepL key: a label, then the input with an eye button on its right,
-// then a note on what an empty one means. Under them, whether captures
-// are translated by themselves.
-void SettingsWindow::add_api_settings(int x, int w){
-    const int left = x + MARGIN, right = x + w - MARGIN;
-    // Lines up with the first category in the sidebar
-    int y = MARGIN + (CATEGORY_H - 20) / 2;
-
-    Fl_Box* label = new Fl_Box(left, y, right - left, 20, "DeepL API key");
-    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    y += label->h() + 4;
-
-    // Same height as the search bar; the button is square, like the gear
-    const int btn_x = right - PILL_H;
-    key_input = new ClipboardInput(left, y, btn_x - 6 - left, PILL_H);
-    key_input->value(settings.get().api.deepl_key.c_str());
-    // On every keystroke, so the key is in use as soon as it's typed
-    key_input->when(FL_WHEN_CHANGED);
-    key_input->callback(on_key_changed, this);
-
-    key_visibility_btn = new Fl_Button(btn_x, y, PILL_H, PILL_H);
-    key_visibility_btn->box(FL_ROUND_UP_BOX);    // Round, like the gear
-    key_visibility_btn->clear_visible_focus();   // No dotted focus ring after a click
-    key_visibility_btn->callback(on_key_visibility, this);
-    set_key_hidden(true);
-    y += PILL_H + 6;
-
-    Fl_Box* note = new Fl_Box(left, y, right - left, 20,
-                              "If empty, the DEEPL_API_KEY environment variable is used.");
-    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    note->labelsize(12);
-    note->labelcolor(DIM);
-    y += note->h() + 14;
-
-    auto_translate_check = new Fl_Check_Button(left, y, right - left, 20,
-                                               "Translate transcripts and screen text automatically");
-    auto_translate_check->value(settings.get().api.auto_translate);
-    auto_translate_check->clear_visible_focus();
-    auto_translate_check->callback(on_auto_translate, this);
-    y += auto_translate_check->h() + 2;
-
-    Fl_Box* auto_note = new Fl_Box(left, y, right - left, 32,
-                                   "Sends each one to DeepL as soon as it's there, which counts towards the "
-                                   "key's quota. Off, or without a key, only Translate (Ctrl+T) does.");
-    auto_note->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
-    auto_note->labelsize(12);
-    auto_note->labelcolor(DIM);
-}
-
-// Whisper models: a heading, a row per model, then a note. A row is a
-// radio button labelled with the model's name, its size, and a button.
+// Whisper models: a heading, then a row per model: a radio button
+// labelled with the model's name, its size, and a button. Under them
+// whether it runs on the GPU, and the microphone.
 void SettingsWindow::add_speech_settings(int x, int w){
     const int left = x + MARGIN, right = x + w - MARGIN;
-    // Lines up with the first category in the sidebar, like the API page
+    // Lines up with the first category in the sidebar, like the General page
     int y = MARGIN + (CATEGORY_H - 20) / 2;
 
     Fl_Box* label = new Fl_Box(left, y, right - left, 20, "Whisper model");
     label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    std::string models_tip = "Larger models are more accurate, but slower and use more memory.";
+    // Not worth failing over: the folder is only shown, not needed here
+    try {
+        models_tip += std::format("\nSaved in {}", models_dir().string());
+    } catch (const std::exception&){}
+    set_tip({label}, models_tip);
     y += label->h() + 4;
 
     const int btn_x = right - MODEL_BTN_W;
@@ -373,56 +363,26 @@ void SettingsWindow::add_speech_settings(int x, int w){
         model_rows.push_back(row);
         y += MODEL_ROW_H;
     }
-    y += 6;
-
-    Fl_Box* note = new Fl_Box(left, y, right - left, 20,
-                              "Larger models are more accurate, but slower and use more memory.");
-    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    note->labelsize(12);
-    note->labelcolor(DIM);
-    y += note->h();
-
-    // Not worth failing over: the folder is only shown, not needed here
-    try {
-        Fl_Box* folder = new Fl_Box(left, y, right - left, 20);
-        const std::string dir = models_dir().string();
-        folder->copy_label(std::format("Saved in {}", dir).c_str());
-        // In full, in case it's cut off
-        folder->copy_tooltip(dir.c_str());
-        folder->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-        folder->labelsize(12);
-        folder->labelcolor(DIM);
-    } catch (const std::exception&){}
-    y += 20 + 14;
+    y += GROUP_GAP;
 
     // Whether whisper runs on the GPU, and which one. Without one, e.g. in
     // a build without GPU support, it can't be turned on.
     const std::string gpu = Transcriber::gpu_name();
-    gpu_check = new Fl_Check_Button(left, y, right - left, 20);
-    const std::string gpu_label = gpu.empty() ? std::string("Transcribe on the GPU")
+    gpu_check = new Fl_Check_Button(left, y, right - left, PILL_H);
+    // In the label when there's none: an inactive button shows no tooltip
+    const std::string gpu_label = gpu.empty() ? std::string("Transcribe on the GPU (none found)")
                                               : std::format("Transcribe on the GPU ({})", gpu);
     gpu_check->copy_label(gpu_label.c_str());
     gpu_check->value(!gpu.empty() && settings.get().speech.use_gpu);
     gpu_check->clear_visible_focus();
     gpu_check->callback(on_gpu_toggled, this);
+    set_tip({gpu_check}, "Much faster, but takes video memory while the model is loaded.");
     if (gpu.empty()) gpu_check->deactivate();
-    y += gpu_check->h() + 2;
+    y += ROW_H;
 
-    Fl_Box* gpu_note = new Fl_Box(left, y, right - left, 20,
-                                  gpu.empty() ? "No GPU found, so it runs on the CPU."
-                                              : "Much faster, but takes video memory while the model is loaded.");
-    gpu_note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    gpu_note->labelsize(12);
-    gpu_note->labelcolor(DIM);
-    y += gpu_note->h() + 14;
-
-    // Microphone: a label, then a dropdown as wide as the rows. Filled by
-    // refresh_microphones(), since what's plugged in changes.
-    Fl_Box* mic_label = new Fl_Box(left, y, right - left, 20, "Microphone");
-    mic_label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    y += mic_label->h() + 4;
-
-    mic_choice = new Fl_Choice(left, y, right - left, PILL_H);
+    // Filled by refresh_microphones(), since what's plugged in changes
+    row_label(left, y, "Microphone");
+    mic_choice = new Fl_Choice(left + LABEL_W, y, right - left - LABEL_W, PILL_H);
     mic_choice->clear_visible_focus();
     mic_choice->callback(on_mic_chosen, this);
 }
@@ -450,15 +410,14 @@ void SettingsWindow::on_category(Fl_Widget* w, void* data){
 }
 
 void SettingsWindow::select(size_t i){
-    // Leaving the General, History, Buffer or Anki page is done with it
-    // too. The box keeps focus while hidden, so it wouldn't hear about it
+    // Leaving the General, Recording or Anki page is done with it too. The box keeps focus while hidden, so it wouldn't hear about it
     // otherwise.
     apply_scroll_speed();
     apply_capacity();
     apply_buffer_seconds();
     apply_quality();
-    if (shortcut_input) shortcut_input->stop_waiting();
-    if (screen_shortcut_input) screen_shortcut_input->stop_waiting();
+    for (ShortcutInput* input : shortcut_inputs)
+        if (input) input->stop_waiting();
     // Already done when the category was clicked, but not when it's
     // selected from code
     categories[i]->setonly();
@@ -646,141 +605,144 @@ void SettingsWindow::refresh_microphones(){
     set_items(*mic_choice, labels, static_cast<int>(selected - mic_names.begin()));
 }
 
-// A label over a box for a number of seconds, with a note right of the box
-static ClipboardInput* seconds_input(int left, int& y, int w, const char* label_text, const std::string& note_text){
-    Fl_Box* label = new Fl_Box(left, y, w, 20, label_text);
-    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    y += label->h() + 4;
-
-    auto* input = new ClipboardInput(left, y, CAPACITY_W, PILL_H);
-    input->type(FL_INT_INPUT);
-    // Like the capacity, only on Enter or leaving the box: typing 60 goes
-    // through 6, which would forget what was recorded twice
-    input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
-
-    Fl_Box* note = new Fl_Box(left + CAPACITY_W + 10, y, w - CAPACITY_W - 10, PILL_H);
-    note->copy_label(note_text.c_str());
-    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    note->labelsize(12);
-    note->labelcolor(DIM);
-    y += PILL_H + 14;
-    return input;
-}
-
-// Whether it records, then how long it keeps and how much a capture
-// starts with selected, then whether it's recording now
-void SettingsWindow::add_buffer_settings(int x, int w){
+// Whether the rolling buffer records, how long it keeps and how much a
+// capture starts with selected, and whether it's recording now. Then what
+// happens when a line is stashed.
+void SettingsWindow::add_recording_settings(int x, int w){
     const int left = x + MARGIN, right = x + w - MARGIN;
-    // Lines up with the first category in the sidebar, like the API page
-    int y = MARGIN + (CATEGORY_H - 20) / 2;
+    const int box_x = left + LABEL_W;
+    // Lines up with the first category in the sidebar, like the General page
+    int y = MARGIN + (CATEGORY_H - PILL_H) / 2;
 
-    buffer_enabled = new Fl_Check_Button(left, y, right - left, 20,
+    buffer_enabled = new Fl_Check_Button(left, y, right - left, PILL_H,
                                          "Keep the last seconds of what the computer plays");
     buffer_enabled->value(settings.get().buffer.enabled);
     buffer_enabled->clear_visible_focus();
     buffer_enabled->callback(on_buffer_enabled, this);
-    y += buffer_enabled->h() + 2;
+    set_tip({buffer_enabled}, "Only kept in memory. Nothing is saved unless you stash it or add it to a card.");
+    y += ROW_H;
 
-    Fl_Box* privacy = new Fl_Box(left, y, right - left, 20,
-                                 "It's only kept in memory. Nothing is saved unless you add it to a card.");
-    privacy->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    privacy->labelsize(12);
-    privacy->labelcolor(DIM);
-    y += privacy->h() + 14;
-
-    buffer_seconds_input = seconds_input(left, y, right - left, "Seconds to keep",
-        std::format("From {} to {}. Changing it forgets what was kept.",
-                    BufferSettings::MIN_SECONDS, BufferSettings::MAX_SECONDS));
+    // Like the capacity: typing 60 goes through 6, which would forget what
+    // was recorded twice
+    Fl_Box* seconds_label = row_label(left, y, "Seconds to keep");
+    buffer_seconds_input = number_input(box_x, y);
     buffer_seconds_input->value(settings.get().buffer.seconds);
     buffer_seconds_input->callback(on_buffer_seconds, this);
+    set_tip({seconds_label, buffer_seconds_input},
+            std::format("From {} to {}. Changing it forgets what was kept.",
+                        BufferSettings::MIN_SECONDS, BufferSettings::MAX_SECONDS));
+    y += ROW_H;
 
-    selection_seconds_input = seconds_input(left, y, right - left, "Seconds selected at first",
-                                            "The end of a capture, to send to whisper as it is.");
+    Fl_Box* selection_label = row_label(left, y, "Selected at first");
+    selection_seconds_input = number_input(box_x, y);
     selection_seconds_input->value(settings.get().buffer.selection_seconds);
     selection_seconds_input->callback(on_buffer_seconds, this);
+    set_tip({selection_label, selection_seconds_input},
+            "Seconds at the end of a capture that start selected, to send to whisper as they are.");
+    y += ROW_H;
 
     buffer_status = new Fl_Box(left, y, right - left, 20);
     buffer_status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-    y += buffer_status->h() + 14;
+    buffer_status->labelsize(12);
+    y += buffer_status->h() + GROUP_GAP;
 
-    add_hotkey_settings(left, right, y, HotkeyAction::Capture);
+    const std::string stash_tip = "A stashed line is saved on this computer, its audio and screenshot, until a "
+                                  "card is made from it or it's deleted.\nAbout 3 MB for 30 seconds.";
+    stash_chime_check = new Fl_Check_Button(left, y, right - left, PILL_H, "Chime when a line is stashed");
+    stash_chime_check->value(settings.get().buffer.stash_chime);
+    stash_chime_check->clear_visible_focus();
+    stash_chime_check->callback(on_stash_chime, this);
+    set_tip({stash_chime_check}, stash_tip);
+    y += ROW_H;
+
+    stash_transcribe_check = new Fl_Check_Button(left, y, right - left, PILL_H,
+                                                 "Transcribe stashed lines right away");
+    stash_transcribe_check->value(settings.get().buffer.stash_transcribe);
+    stash_transcribe_check->clear_visible_focus();
+    stash_transcribe_check->callback(on_stash_transcribe, this);
+    set_tip({stash_transcribe_check}, "So the stash shows what each line says. Whisper then runs while you "
+                                      "watch, which can slow down a game.");
 }
 
-void SettingsWindow::add_hotkey_settings(int left, int right, int& y, HotkeyAction action){
-    const bool capture = action == HotkeyAction::Capture;
-    Fl_Box* label = new Fl_Box(left, y, right - left, 20, capture ? "Capture shortcut" : "Screen capture shortcut");
-    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    y += label->h() + 4;
+// The label, and what the shortcut does, for each HotkeyAction
+struct HotkeyText {
+    const char* label;
+    const char* tip;
+};
+static constexpr HotkeyText HOTKEY_TEXTS[HOTKEY_ACTION_COUNT] = {
+    {"Capture", "Opens what the computer just played, to transcribe, look up and add to Anki."},
+    {"Read screen", "Reads the text on the screen, e.g. in a game or visual novel. Drag around the text box "
+                    "to read only that; it's kept for the game.\nThe models that read it (PaddleOCR, about "
+                    "30 MB) are downloaded the first time."},
+    {"Stash", "Saves what a capture would open without stopping anything, to look at after the episode.\n"
+              "Open them with the stash button in the main window."},
+};
+
+// The setting that holds action's shortcut on Windows, in s, which is
+// Settings or const Settings
+template <typename S>
+static auto& shortcut_setting(S& s, HotkeyAction action){
+    switch (action){
+    case HotkeyAction::Capture: return s.buffer.shortcut;
+    case HotkeyAction::ReadScreen: return s.screen_text.shortcut;
+    case HotkeyAction::Stash: return s.buffer.stash_shortcut;
+    }
+    return s.buffer.shortcut;
+}
+
+// A row per shortcut, each with a line under it for why it can't be
+// received, then a note on how to set them
+void SettingsWindow::add_shortcut_settings(int x, int w){
+    const int left = x + MARGIN, right = x + w - MARGIN;
+    const int box_x = left + LABEL_W;
+    // Lines up with the first category in the sidebar, like the General page
+    int y = MARGIN + (CATEGORY_H - PILL_H) / 2;
 
     // On Linux, the command to bind to a key, in a box it can be copied
     // from. None on Windows, where the app takes the key itself.
-    const std::string command = hotkey_command(action);
-    if (command.empty()){
-        ShortcutInput* input = new ShortcutInput(left, y, SHORTCUT_W, PILL_H);
-        input->shortcut(capture ? settings.get().buffer.shortcut : settings.get().screen_text.shortcut);
-        input->callback(capture ? on_shortcut : on_screen_shortcut, this);
-        // Otherwise pressing the shortcut there would capture
-        input->on_waiting = [this](bool waiting){ capturer.pause_hotkey(waiting); };
-        (capture ? shortcut_input : screen_shortcut_input) = input;
+    const bool commands = !hotkey_command(HotkeyAction::Capture).empty();
+    for (HotkeyAction action : HOTKEY_ACTIONS){
+        const size_t index = static_cast<size_t>(action);
+        const HotkeyText& text = HOTKEY_TEXTS[index];
+        Fl_Box* label = row_label(left, y, text.label);
 
-        Fl_Box* note = new Fl_Box(left + SHORTCUT_W + 10, y, right - left - SHORTCUT_W - 10, PILL_H,
-                                  "Click it, then press the keys. Works in any app, even fullscreen.");
-        note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
-        note->labelsize(12);
-        note->labelcolor(DIM);
-        y += PILL_H + 6;
-    } else {
-        auto* command_box = new ClipboardInput(left, y, right - left, PILL_H);
-        command_box->value(command.c_str());
-        command_box->readonly(1);
-        y += PILL_H + 6;
+        Fl_Widget* box;
+        if (commands){
+            auto* command_box = new ClipboardInput(box_x, y, right - box_x, PILL_H);
+            command_box->value(hotkey_command(action).c_str());
+            command_box->readonly(1);
+            box = command_box;
+        } else {
+            ShortcutInput* input = new ShortcutInput(box_x, y, SHORTCUT_W, PILL_H);
+            input->shortcut(shortcut_setting(settings.get(), action));
+            input->callback(on_shortcut, this);
+            // Otherwise pressing the shortcut there would capture
+            input->on_waiting = [this](bool waiting){ capturer.pause_hotkey(waiting); };
+            shortcut_inputs[index] = input;
+            box = input;
+        }
+        set_tip({label, box}, text.tip);
+        y += PILL_H + 2;
 
-        // Wayland lets no app grab a key for itself
-        Fl_Box* note = new Fl_Box(left, y, right - left, 32,
-                                  capture ? "Bind a key to it in your desktop's settings, e.g. in hyprland.conf:\n"
-                                            "bind = SUPER, A, exec, <the command>"
-                                          : "Bind a key to it in your desktop's settings, e.g. in hyprland.conf:\n"
-                                            "bind = SUPER, S, exec, <the command>");
-        note->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-        note->labelsize(12);
-        note->labelcolor(DIM);
-        y += note->h() + 4;
+        Fl_Box* status = dim_line(box_x, y, right - box_x, 16);
+        status->labelcolor(ERROR_COLOR);
+        hotkey_statuses[index] = status;
+        y += status->h() + 8;
     }
 
-    Fl_Box* status = new Fl_Box(left, y, right - left, 20);
-    status->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-    status->labelcolor(ERROR_COLOR);
-    (capture ? hotkey_status : screen_hotkey_status) = status;
-    y += status->h() + 4;
+    // Wayland lets no app grab a key for itself
+    Fl_Box* note = dim_line(left, y, right - left, 32,
+                            commands ? "Bind a key to each command in your desktop's settings,\n"
+                                       "e.g. in hyprland.conf: bind = SUPER, A, exec, <the command>"
+                                     : "Click a box, then press the keys. They work in any app, even fullscreen.");
+    note->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
 }
 
-// What the screen capture is for, then its shortcut
-void SettingsWindow::add_screen_text_settings(int x, int w){
-    const int left = x + MARGIN, right = x + w - MARGIN;
-    // Lines up with the first category in the sidebar, like the API page
-    int y = MARGIN + (CATEGORY_H - 20) / 2;
-
-    Fl_Box* about = new Fl_Box(left, y, right - left, 64,
-                               "For games and visual novels: a screen capture reads the text on the screen, "
-                               "to look up and add to Anki like a transcript. Drag around the text box in it "
-                               "to read only that; it's kept for the game.");
-    about->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
-    y += about->h() + 14;
-
-    add_hotkey_settings(left, right, y, HotkeyAction::ReadScreen);
-
-    Fl_Box* models = new Fl_Box(left, y + 10, right - left, 32,
-                                "The models that read it (PaddleOCR, about 30 MB) are downloaded the first time.");
-    models->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
-    models->labelsize(12);
-    models->labelcolor(DIM);
-}
-
-void SettingsWindow::on_screen_shortcut(Fl_Widget*, void* data){
+void SettingsWindow::on_stash_transcribe(Fl_Widget*, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
-    const std::string shortcut = self->screen_shortcut_input->shortcut();
-    // Like on_shortcut
-    self->settings.update([&shortcut](Settings& s){ s.screen_text.shortcut = shortcut; });
+    const bool transcribe = self->stash_transcribe_check->value();
+    // From the next stash on; lines already stashed stay as they are
+    self->settings.update([transcribe](Settings& s){ s.buffer.stash_transcribe = transcribe; });
 }
 
 void SettingsWindow::on_buffer_enabled(Fl_Widget*, void* data){
@@ -796,12 +758,22 @@ void SettingsWindow::on_gpu_toggled(Fl_Widget*, void* data){
     self->settings.update([use_gpu](Settings& s){ s.speech.use_gpu = use_gpu; });
 }
 
-void SettingsWindow::on_shortcut(Fl_Widget*, void* data){
+void SettingsWindow::on_shortcut(Fl_Widget* w, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
-    const std::string shortcut = self->shortcut_input->shortcut();
-    // The Capturer hears of it and registers it; refresh_buffer() then
-    // shows whether that worked
-    self->settings.update([&shortcut](Settings& s){ s.buffer.shortcut = shortcut; });
+    for (HotkeyAction action : HOTKEY_ACTIONS){
+        ShortcutInput* input = self->shortcut_inputs[static_cast<size_t>(action)];
+        if (input != w) continue;
+        const std::string shortcut = input->shortcut();
+        // The Capturer hears of it and registers it; refresh_buffer() then
+        // shows whether that worked
+        self->settings.update([&shortcut, action](Settings& s){ shortcut_setting(s, action) = shortcut; });
+    }
+}
+
+void SettingsWindow::on_stash_chime(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const bool chime = self->stash_chime_check->value();
+    self->settings.update([chime](Settings& s){ s.buffer.stash_chime = chime; });
 }
 
 void SettingsWindow::on_buffer_seconds(Fl_Widget*, void* data){
@@ -844,21 +816,22 @@ void SettingsWindow::refresh_buffer(){
     }
     buffer_status->redraw();
 
-    if (hotkey_status){
-        hotkey_status->copy_label(capturer.hotkey_error(HotkeyAction::Capture).c_str());
-        hotkey_status->redraw();
+    for (HotkeyAction action : HOTKEY_ACTIONS){
+        Fl_Box* status = hotkey_statuses[static_cast<size_t>(action)];
+        if (!status) continue;
+        const std::string error = capturer.hotkey_error(action);
+        status->copy_label(error.c_str());
+        // In full, in case it's cut off
+        status->copy_tooltip(error.empty() ? nullptr : error.c_str());
+        status->redraw();
     }
-    if (screen_hotkey_status){
-        screen_hotkey_status->copy_label(capturer.hotkey_error(HotkeyAction::ReadScreen).c_str());
-        screen_hotkey_status->redraw();
-    }
+    if (stash_chime_check) stash_chime_check->value(settings.get().buffer.stash_chime);
+    if (stash_transcribe_check) stash_transcribe_check->value(settings.get().buffer.stash_transcribe);
 }
 
-// A label on the left, and a dropdown filling the rest of the row
+// A row's label, and a dropdown filling the rest of the row
 static Fl_Choice* labelled_choice(int left, int y, int w, const char* label_text){
-    constexpr int LABEL_W = 90;
-    Fl_Box* label = new Fl_Box(left, y, LABEL_W, PILL_H, label_text);
-    label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    row_label(left, y, label_text);
     auto* choice = new Fl_Choice(left + LABEL_W, y, w - LABEL_W, PILL_H);
     choice->clear_visible_focus();
     return choice;
@@ -868,8 +841,7 @@ static Fl_Choice* labelled_choice(int left, int y, int w, const char* label_text
 // it goes in, then a button that asks Anki again and whether it answered
 void SettingsWindow::add_anki_settings(int x, int w){
     const int left = x + MARGIN, right = x + w - MARGIN;
-    constexpr int ROW_H = PILL_H + 4;
-    // Lines up with the first category in the sidebar, like the API page
+    // Lines up with the first category in the sidebar, like the General page
     int y = MARGIN + (CATEGORY_H - PILL_H) / 2;
 
     deck_choice = labelled_choice(left, y, right - left, "Deck");
@@ -877,13 +849,8 @@ void SettingsWindow::add_anki_settings(int x, int w){
     y += ROW_H;
     note_type_choice = labelled_choice(left, y, right - left, "Note type");
     note_type_choice->callback(on_note_type_chosen, this);
-    y += ROW_H + 6;
-
-    Fl_Box* note = new Fl_Box(left, y, right - left, 18, "Which field of the note type gets each part of a card:");
-    note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    note->labelsize(12);
-    note->labelcolor(DIM);
-    y += note->h() + 2;
+    set_tip({note_type_choice}, "Each part of a card goes in the note type's field chosen below.");
+    y += ROW_H + GROUP_GAP;
 
     for (size_t i = 0; i < CARD_PART_COUNT; ++i){
         field_choices[i] = labelled_choice(left, y, right - left, CARD_PART_NAMES[i]);
@@ -892,24 +859,14 @@ void SettingsWindow::add_anki_settings(int x, int w){
     }
 
     // Under the Picture field, which it's about
-    constexpr int LABEL_W = 90;
-    Fl_Box* quality_label = new Fl_Box(left, y, LABEL_W, PILL_H, "Quality");
-    quality_label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    quality_input = new ClipboardInput(left + LABEL_W, y, CAPACITY_W, PILL_H);
-    quality_input->type(FL_INT_INPUT);
+    Fl_Box* quality_label = row_label(left, y, "Picture quality");
+    quality_input = number_input(left + LABEL_W, y);
     quality_input->value(settings.get().anki.picture_quality);
-    // Like the capacity, only on Enter or leaving the box
-    quality_input->when(FL_WHEN_ENTER_KEY | FL_WHEN_RELEASE);
     quality_input->callback(on_quality, this);
-    const int note_x = left + LABEL_W + CAPACITY_W + 10;
-    Fl_Box* quality_note = new Fl_Box(note_x, y, right - note_x, PILL_H);
-    quality_note->copy_label(std::format("From {} to {}. Higher is sharper.",
-                                         AnkiSettings::MIN_QUALITY, AnkiSettings::MAX_QUALITY).c_str());
-    quality_input->tooltip("The picture's JPEG quality. Higher is sharper, but takes more space in Anki.");
-    quality_note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-    quality_note->labelsize(12);
-    quality_note->labelcolor(DIM);
-    y += ROW_H + 4;
+    set_tip({quality_label, quality_input},
+            std::format("The picture's JPEG quality, from {} to {}. Higher is sharper, but takes more space in Anki.",
+                        AnkiSettings::MIN_QUALITY, AnkiSettings::MAX_QUALITY));
+    y += ROW_H;
 
     auto* reload = new Fl_Button(left, y, CLEAR_BTN_W, MODEL_BTN_H, "Ask Anki again");
     reload->box(FL_ROUND_UP_BOX);

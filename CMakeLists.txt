@@ -161,6 +161,7 @@ add_executable(hearstash
     src/core/settings.cpp
     src/core/sha1.cpp
     src/core/shortcut.cpp
+    src/core/stash.cpp
     src/core/time_ranges.cpp
     src/core/transcriber.cpp
     src/core/whisper_models.cpp
@@ -189,6 +190,9 @@ add_executable(hearstash
     src/ui/shared_transcriber.cpp
     src/ui/shortcut_input.cpp
     src/ui/smooth_scroll.cpp
+    src/ui/stash_store.cpp
+    src/ui/stash_transcriber.cpp
+    src/ui/stash_window.cpp
     src/ui/theme.cpp
     src/ui/waveform.cpp
     src/ui/wrapped_text.cpp
@@ -307,3 +311,10 @@ add_executable(shortcut_test tests/shortcut_test.cpp src/core/shortcut.cpp)
 target_compile_options(shortcut_test PRIVATE -Wall -Wextra)
 target_include_directories(shortcut_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME shortcut COMMAND shortcut_test)
+
+add_executable(stash_test tests/stash_test.cpp src/core/stash.cpp src/core/image.cpp src/core/media_encoding.cpp
+               src/core/atomic_write.cpp src/core/local_time.cpp)
+target_compile_options(stash_test PRIVATE -Wall -Wextra)
+target_include_directories(stash_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(stash_test PRIVATE JPEG::JPEG nlohmann_json::nlohmann_json)
+add_test(NAME stash COMMAND stash_test)

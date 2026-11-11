@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -58,9 +59,14 @@ public:
     // the front. A window that's already open is refreshed where it is.
     // Cancels a transcription of the capture there was.
     // screenshot is kept for the card; if it's empty, screenshot_error
-    // says why.
+    // says why. title is the window's. on_card_added, if there's one, is
+    // called each time a card made from this capture is added to Anki,
+    // e.g. to take a stashed line out of the stash. transcript, if it
+    // isn't empty, is what the selection says already, e.g. transcribed
+    // when it was stashed: it's shown at once, without pressing Enter.
     void open(std::vector<float> audio, int rate, int selection_seconds, Image screenshot,
-              std::string screenshot_error);
+              std::string screenshot_error, std::string title = "Capture",
+              std::function<void()> on_card_added = {}, std::string transcript = {});
 
 private:
     // A thread that loads the model or transcribes. Each one hands its
@@ -105,6 +111,9 @@ private:
     std::unique_ptr<ClipPlayer> player;
     Image screenshot;
     std::string screenshot_error;
+    // From open()
+    std::string title;
+    std::function<void()> on_card_added;
     // Created the first time a card is added. Not a plain member: a window
     // created in this one's constructor would end up inside it.
     std::unique_ptr<CardWindow> card_win;

@@ -35,6 +35,15 @@ inline constexpr const char* ICON_HISTORY =
     "<path d='M8.8 5v3.2l2.2 1.4'/>"
     "</svg>";
 
+// A tray with an arrow going down into it: lines stashed for later
+inline constexpr const char* ICON_STASH =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' "
+    "stroke='#444' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'>"
+    "<path d='M2 9.5v4h12v-4'/>"
+    "<path d='M2 9.5h3.2l.9 1.7h3.8l.9-1.7H14'/>"
+    "<path d='M8 1.8v6.4M5.6 5.8 8 8.2l2.4-2.4'/>"
+    "</svg>";
+
 // Magnifying glass: in front of a box whose text searches or filters
 inline constexpr const char* ICON_SEARCH =
     "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' "
