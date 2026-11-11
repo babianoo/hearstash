@@ -11,7 +11,8 @@
 // as JSON. Grouped like the window's categories, each group an object in
 // the file:
 //
-//   {"anki": {"deck": "Mining"}, "api": {"deepl_key": "...", "last_api": "jisho"},
+//   {"anki": {"deck": "Mining"},
+//    "api": {"auto_translate": true, "deepl_key": "...", "last_api": "jisho"},
 //    "buffer": {"seconds": 30}, "general": {"scroll_speed": 50},
 //    "history": {"capacity": 100},
 //    "screen_text": {"areas": {"fate.exe": {"x": 0.1, ...}}},
@@ -37,6 +38,10 @@ struct ApiSettings {
     // The API last picked on the main screen, which it starts with next
     // time. Saved by its id, like in the history.
     Api last_api = Api::Jisho;
+    // Whether a transcript, or text read on the screen, is translated with
+    // DeepL as soon as it's there, without pressing Translate. Only with a
+    // key: without one it isn't, rather than asking for one every time.
+    bool auto_translate = true;
 };
 
 // The History category

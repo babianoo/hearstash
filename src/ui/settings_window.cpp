@@ -283,7 +283,8 @@ void SettingsWindow::on_clear_history(Fl_Widget*, void* data){
 }
 
 // DeepL key: a label, then the input with an eye button on its right,
-// then a note on what an empty one means
+// then a note on what an empty one means. Under them, whether captures
+// are translated by themselves.
 void SettingsWindow::add_api_settings(int x, int w){
     const int left = x + MARGIN, right = x + w - MARGIN;
     // Lines up with the first category in the sidebar
@@ -313,6 +314,21 @@ void SettingsWindow::add_api_settings(int x, int w){
     note->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     note->labelsize(12);
     note->labelcolor(DIM);
+    y += note->h() + 14;
+
+    auto_translate_check = new Fl_Check_Button(left, y, right - left, 20,
+                                               "Translate transcripts and screen text automatically");
+    auto_translate_check->value(settings.get().api.auto_translate);
+    auto_translate_check->clear_visible_focus();
+    auto_translate_check->callback(on_auto_translate, this);
+    y += auto_translate_check->h() + 2;
+
+    Fl_Box* auto_note = new Fl_Box(left, y, right - left, 32,
+                                   "Sends each one to DeepL as soon as it's there, which counts towards the "
+                                   "key's quota. Off, or without a key, only Translate (Ctrl+T) does.");
+    auto_note->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+    auto_note->labelsize(12);
+    auto_note->labelcolor(DIM);
 }
 
 // Whisper models: a heading, a row per model, then a note. A row is a
@@ -459,6 +475,13 @@ void SettingsWindow::on_key_changed(Fl_Widget*, void* data){
     SettingsWindow* self = static_cast<SettingsWindow*>(data);
     // As typed: update() trims it
     self->settings.update([self](Settings& s){ s.api.deepl_key = self->key_input->value(); });
+}
+
+void SettingsWindow::on_auto_translate(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    const bool on = self->auto_translate_check->value();
+    // From the next transcript or screen read on
+    self->settings.update([on](Settings& s){ s.api.auto_translate = on; });
 }
 
 void SettingsWindow::on_key_visibility(Fl_Widget*, void* data){

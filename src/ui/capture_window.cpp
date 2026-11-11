@@ -286,7 +286,10 @@ void CaptureWindow::on_job_done(void* data){
     if (!result->error.empty())
         self->panels->show_note(std::format("Couldn't turn the speech into text: {}", result->error));
     else if (result->text.empty()) self->panels->show_note("No speech found in the selection.");
-    else self->panels->show_text(result->text);
+    else {
+        self->panels->show_text(result->text);
+        self->panels->auto_translate(self->settings.get());
+    }
     self->refresh_transcribe_button();
 }
 

@@ -19,7 +19,8 @@ struct TextSpan;
 // The bottom half of the capture windows: the text on the left, big, and
 // a panel on the right. Selecting part of the text with the mouse looks it
 // up on Jisho, in the panel; translate() shows the whole text's DeepL
-// translation there instead. The audio capture window's text is whisper's
+// translation there instead, and so does auto_translate() for new text,
+// if the settings say so. The audio capture window's text is whisper's
 // transcript, the screen capture window's what was read on the screen.
 //
 // Not a widget: it adds its widgets to the window being built, and the
@@ -48,6 +49,10 @@ public:
     // has, or says in a dialog that there's none. Does nothing without
     // text.
     void translate(const Settings& settings);
+    // The same for text that was just shown, if settings say to translate
+    // it without being asked. Does nothing without a key: a dialog on
+    // every capture would be in the way.
+    void auto_translate(const Settings& settings);
 
     // A card's text: the sentence, and the word looked up last with what
     // Jisho said of it
@@ -100,4 +105,6 @@ private:
     void set_panel(const std::vector<TextSpan>& spans);
     // Looks up what's selected in the text, if it's worth it
     void look_up_selection();
+    // Translates the text into the panel with key, which isn't empty
+    void start_translation(std::string key);
 };

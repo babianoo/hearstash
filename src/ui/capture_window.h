@@ -28,7 +28,8 @@ class Fl_Widget;
 // button. Enter (or the Transcribe button) turns it into text with
 // whisper, shown under the waveform; Escape then cancels. Selecting part
 // of the text with the mouse looks it up on Jisho, in a panel beside it;
-// Translate (Ctrl+T) shows the whole line's DeepL translation there.
+// Translate (Ctrl+T) shows the whole line's DeepL translation there,
+// which it starts with if the settings say to translate by itself.
 // Add to Anki (Ctrl+N) then opens a card with the word, the line, the
 // selected audio and the screenshot taken with the capture.
 //

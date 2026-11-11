@@ -40,7 +40,7 @@ static void from_json(const json& j, Api& api){
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AnkiSettings, deck, note_type, word_field, reading_field,
                                                 meaning_field, sentence_field, audio_field, picture_field,
                                                 picture_quality, crop_x, crop_y, crop_w, crop_h)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, deepl_key, last_api)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ApiSettings, auto_translate, deepl_key, last_api)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BufferSettings, enabled, seconds, selection_seconds, shortcut)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralSettings, scroll_speed)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HistorySettings, capacity)

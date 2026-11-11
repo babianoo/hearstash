@@ -26,7 +26,8 @@ class Fl_Widget;
 // games and visual novels: the capture window's twin, with the screenshot
 // taken then where the waveform is. The text on it is read (OCR) as the
 // window opens, and shows where the transcript would, to look up,
-// translate and add to Anki the same way.
+// translate and add to Anki the same way. It's translated by itself too,
+// if the settings say so.
 //
 // What's read is the part of the screenshot in the rectangle on it: all
 // of it at first. Dragging a new one, e.g. around the text box, reads

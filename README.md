@@ -141,7 +141,11 @@ Everything is in **Settings**:
   guessed from their names. Needs Anki running with the
   [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on.
 - **API**: your DeepL key (free or Pro). It can also come from the
-  `DEEPL_API_KEY` environment variable, which is never saved.
+  `DEEPL_API_KEY` environment variable, which is never saved. With a key,
+  transcripts and screen text are translated as soon as they're there;
+  untick **Translate transcripts and screen text automatically** to only
+  translate with the Translate button (Ctrl+T), e.g. to save the key's
+  quota.
 - **History**: how many searches to keep, and clearing them.
 
 ### The capture shortcuts
@@ -233,6 +237,9 @@ The app listens to everything your computer plays, so:
 - Transcription and reading the screen run locally. Nothing is sent anywhere except what you
   choose to look up (to Jisho, DeepL or MyMemory) and cards you add to
   your own Anki.
+- The one exception: with a DeepL key, each transcript and each text read
+  on the screen is sent to DeepL to translate, without asking. Settings >
+  API turns that off.
 - Turning the buffer off in Settings > Buffer stops it recording.
 
 ## Known gaps

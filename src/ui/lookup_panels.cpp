@@ -134,7 +134,6 @@ void LookupPanels::on_lookup_done(void* data){
 void LookupPanels::translate(const Settings& settings){
     if (text_.empty()) return;
 
-    // Copied for the thread, since the settings may change while it runs
     std::string key = effective_deepl_key(settings);
     if (key.empty()){
         // Modal: waits for OK before returning
@@ -143,13 +142,24 @@ void LookupPanels::translate(const Settings& settings){
                  "set the DEEPL_API_KEY environment variable to use DeepL.");
         return;
     }
+    start_translation(std::move(key));
+}
 
+void LookupPanels::auto_translate(const Settings& settings){
+    if (text_.empty() || !settings.api.auto_translate) return;
+    std::string key = effective_deepl_key(settings);
+    // Translate still says there's none when it's pressed
+    if (!key.empty()) start_translation(std::move(key));
+}
+
+void LookupPanels::start_translation(std::string key){
     // Takes the panel's place from a lookup still running. The word
     // looked up is still what a card gets.
     const unsigned id = ++latest;
     set_panel({{"Translating...", NOTE}});
 
-    // Like a lookup: on a thread that only hands its result back
+    // Like a lookup: on a thread that only hands its result back. It gets
+    // copies, since the text and the settings may change while it runs.
     std::thread([this, id, text = text_, key = std::move(key)]{
         auto* result = new TranslationResult{.panels = this, .id = id};
         try {

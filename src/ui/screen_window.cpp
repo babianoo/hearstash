@@ -227,7 +227,10 @@ void ScreenWindow::on_read_done(void* data){
     if (!result->error.empty()) self->panels->show_note(std::format("Couldn't read the screen: {}", result->error));
     else if (result->text.empty())
         self->panels->show_note("No text found there. Drag around the text in the screenshot to read it.");
-    else self->panels->show_text(result->text);
+    else {
+        self->panels->show_text(result->text);
+        self->panels->auto_translate(self->settings.get());
+    }
     self->refresh_buttons();
 }
 

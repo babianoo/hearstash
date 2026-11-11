@@ -30,7 +30,8 @@ struct WhisperModel;
 // The window the gear button opens: a sidebar of categories on the left,
 // and on the right the page of the selected one. The History page has how
 // many searches the history keeps, and a button that clears it. The API
-// page has the DeepL key, and the Speech-to-Text page the whisper models,
+// page has the DeepL key and whether captures are translated by
+// themselves, and the Speech-to-Text page the whisper models,
 // a row each to download, delete and choose one, then the microphone to
 // record from. The Buffer page has the rolling buffer of what the computer
 // plays: whether it records, how long, whether it's recording now, and
@@ -105,6 +106,9 @@ private:
     // On the API page. Starts hidden; key_visibility_btn toggles that.
     ClipboardInput* key_input = nullptr;
     Fl_Button* key_visibility_btn = nullptr;
+    // Also there: whether transcripts and screen text are translated
+    // without pressing Translate
+    Fl_Check_Button* auto_translate_check = nullptr;
     // On the Speech-to-Text page, indexed like WHISPER_MODELS
     std::vector<ModelRow> model_rows;
     // Also there: "Default", then the microphones. mic_names[i] is what
@@ -149,6 +153,7 @@ private:
     static void on_clear_history(Fl_Widget* w, void* data);
     static void on_key_changed(Fl_Widget* w, void* data);
     static void on_key_visibility(Fl_Widget* w, void* data);
+    static void on_auto_translate(Fl_Widget* w, void* data);
     static void on_model_chosen(Fl_Widget* w, void* data);
     static void on_model_action(Fl_Widget* w, void* data);
     static void on_mic_chosen(Fl_Widget* w, void* data);
