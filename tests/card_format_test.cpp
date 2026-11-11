@@ -20,7 +20,7 @@ static std::string field(const std::vector<std::pair<std::string, std::string>>&
 }
 
 static const CardContent CARD{
-    .word = "悩む", .reading = "なやむ", .meaning = "1. to be worried\n2. to suffer (from)",
+    .word = "悩む", .reading = "なやむ", .meaning = "[Godan verb with 'mu' ending] [Intransitive verb]\n1. to be worried; to be troubled\n2. to suffer (from)",
     .sentence = "私だってもうちょっと悩んでたかも", .highlight = "悩んでた",
     .audio_file = "hearstash_1.wav", .picture_file = "hearstash_1.jpg",
 };
@@ -38,10 +38,17 @@ static void test_immersion_layout(){
           "私だってもうちょっと<span style=\"font-size:1.3em; color: #00828a;\">悩んでた</span>かも");
     CHECK(field(fields, "Back") ==
           "悩む【なやむ】 <br><div style=\"text-align: left;\" class=\"yomitan-glossary\"><ol>"
-          "<li data-dictionary=\"Jisho.org\"><span><ol>"
-          "<li style=\"list-style-type: &quot;①&quot;;\">to be worried</li>"
-          "<li style=\"list-style-type: &quot;②&quot;;\">to suffer (from)</li>"
-          "</ol></span></li></ol></div><br><br><a href=\"\"></a><br>[sound:hearstash_1.wav]");
+          "<li data-dictionary=\"Jisho.org\"><span><ul data-sc-content=\"sense-groups\">"
+          "<li data-sc-content=\"sense-group\">"
+          "<span data-sc-class=\"tag\" data-sc-content=\"part-of-speech-info\">Godan verb with 'mu' ending</span>"
+          "<span data-sc-class=\"tag\" data-sc-content=\"part-of-speech-info\">Intransitive verb</span>"
+          "<ol>"
+          "<li data-sc-content=\"sense\" style=\"list-style-type: &quot;①&quot;;\">"
+          "<ul data-sc-content=\"glossary\"><li>to be worried</li><li>to be troubled</li></ul></li>"
+          "<li data-sc-content=\"sense\" style=\"list-style-type: &quot;②&quot;;\">"
+          "<ul data-sc-content=\"glossary\"><li>to suffer (from)</li></ul></li>"
+          "</ol></li>"
+          "</ul></span></li></ol></div><br><br><a href=\"\"></a><br>[sound:hearstash_1.wav]");
     CHECK(field(fields, "Picture") == "<img alt=\"snapshot\" src=\"hearstash_1.jpg\">");
 }
 
@@ -93,14 +100,49 @@ static void test_details(){
     s.meaning_field = "Back";
     card.meaning = "\n  3.  only one \n\n";
     const std::string back = field(format_card(card, s), "Back");
-    CHECK(back.find("&quot;①&quot;;\">only one</li>") != std::string::npos);
+    CHECK(back.find("&quot;①&quot;;\"><ul data-sc-content=\"glossary\"><li>only one</li></ul>") != std::string::npos);
     CHECK(back.find("②") == std::string::npos);
+    // With no parts of speech, a group without badges
+    CHECK(back.find("data-sc-class=\"tag\"") == std::string::npos);
+}
+
+// Senses grouped under their parts of speech, numbered through
+static void test_sense_groups(){
+    AnkiSettings s;
+    s.meaning_field = "Meaning";
+    CardContent card = CARD;
+    card.meaning = "[Noun]\n1. paper\n2. sheet;; leaf ;\n[Unused]\n[Wikipedia definition]\n3. Paper <a>";
+    const std::string meaning = field(format_card(card, s), "Meaning");
+
+    const std::string noun =
+        "<li data-sc-content=\"sense-group\">"
+        "<span data-sc-class=\"tag\" data-sc-content=\"part-of-speech-info\">Noun</span><ol>"
+        "<li data-sc-content=\"sense\" style=\"list-style-type: &quot;①&quot;;\">"
+        "<ul data-sc-content=\"glossary\"><li>paper</li></ul></li>"
+        // Empty glosses are left out
+        "<li data-sc-content=\"sense\" style=\"list-style-type: &quot;②&quot;;\">"
+        "<ul data-sc-content=\"glossary\"><li>sheet</li><li>leaf</li></ul></li>"
+        "</ol></li>";
+    const std::string wikipedia =
+        "<li data-sc-content=\"sense-group\">"
+        "<span data-sc-class=\"tag\" data-sc-content=\"part-of-speech-info\">Wikipedia definition</span><ol>"
+        "<li data-sc-content=\"sense\" style=\"list-style-type: &quot;③&quot;;\">"
+        "<ul data-sc-content=\"glossary\"><li>Paper &lt;a&gt;</li></ul></li>"
+        "</ol></li>";
+    CHECK(meaning.find(noun + wikipedia) != std::string::npos);
+    // Parts of speech with no senses under them aren't a group
+    CHECK(meaning.find("Unused") == std::string::npos);
+
+    // Only parts of speech is no glossary at all
+    card.meaning = "[Noun]";
+    CHECK(field(format_card(card, s), "Meaning") == "(missing)");
 }
 
 int main(){
     test_immersion_layout();
     test_a_field_each();
     test_details();
+    test_sense_groups();
     if (failures == 0) std::puts("All card format tests passed");
     return failures;
 }

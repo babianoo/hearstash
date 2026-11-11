@@ -2,16 +2,23 @@
 
 #include <cctype>
 #include <format>
+#include <string_view>
 
 #include "core/anki_fields.h"
 
 // The look of the highlight, from the user's Yomitan template
 static constexpr const char* HIGHLIGHT_OPEN = "<span style=\"font-size:1.3em; color: #00828a;\">";
 static constexpr const char* HIGHLIGHT_CLOSE = "</span>";
-// Yomitan's {glossary-brief} wraps the glossary in this
+// Yomitan's {glossary-brief} wraps the glossary in this. Inside it, the
+// senses are marked up the way Jitendex's are, which the Hearstash note
+// type styles (hearstash_note_type.cpp): groups of senses under their
+// parts of speech, and in each sense a list of its glosses.
 static constexpr const char* GLOSSARY_OPEN = "<div style=\"text-align: left;\" class=\"yomitan-glossary\"><ol>"
-                                             "<li data-dictionary=\"Jisho.org\"><span><ol>";
-static constexpr const char* GLOSSARY_CLOSE = "</ol></span></li></ol></div>";
+                                             "<li data-dictionary=\"Jisho.org\"><span>"
+                                             "<ul data-sc-content=\"sense-groups\">";
+static constexpr const char* GLOSSARY_CLOSE = "</ul></span></li></ol></div>";
+static constexpr const char* GROUP_OPEN = "<li data-sc-content=\"sense-group\">";
+static constexpr const char* TAG_OPEN = "<span data-sc-class=\"tag\" data-sc-content=\"part-of-speech-info\">";
 // What comes after the glossary in the template, "<br>{conjugation}<br>{url}",
 // with no conjugation and no URL, which Yomitan writes as an empty link
 static constexpr const char* AFTER_GLOSSARY = "<br><br><a href=\"\"></a>";
@@ -56,29 +63,67 @@ static std::string sense_marker(int n){
             static_cast<char>(0x80 | (c & 0x3F))};
 }
 
-// The meanings, one a line, as Yomitan's glossary. Empty if there are none.
+static std::string_view trimmed(std::string_view text){
+    const auto blank = [](char c){ return c == ' ' || c == '\t' || c == '\r'; };
+    while (!text.empty() && blank(text.front())) text.remove_prefix(1);
+    while (!text.empty() && blank(text.back())) text.remove_suffix(1);
+    return text;
+}
+
+// The meanings as Yomitan's glossary: see CardContent::meaning for how
+// they're written. Empty if there are none.
 static std::string glossary(const std::string& meaning){
-    std::string senses;
+    std::string groups;
+    // The group being read: its parts of speech and its senses. It's
+    // added to groups when the next one starts, unless it has no senses.
+    std::string tags, senses;
+    const auto end_group = [&]{
+        if (!senses.empty()) groups += GROUP_OPEN + tags + "<ol>" + senses + "</ol></li>";
+        tags.clear();
+        senses.clear();
+    };
+
     int n = 0;
     size_t start = 0;
     while (start <= meaning.size()){
         size_t end = meaning.find('\n', start);
         if (end == std::string::npos) end = meaning.size();
-        std::string_view line = std::string_view(meaning).substr(start, end - start);
+        std::string_view line = trimmed(std::string_view(meaning).substr(start, end - start));
         start = end + 1;
+        if (line.empty()) continue;
+
+        // "[Noun] [Suru verb]": the parts of speech of the senses below
+        if (line.front() == '[' && line.back() == ']'){
+            end_group();
+            while (!line.empty()){
+                const size_t close = line.find(']');
+                const std::string_view tag = trimmed(line.substr(1, close - 1));
+                if (!tag.empty()) tags += TAG_OPEN + escape(tag) + "</span>";
+                const size_t open = line.find('[', close);
+                line = open == std::string_view::npos ? std::string_view() : line.substr(open);
+            }
+            continue;
+        }
 
         // Without the "1. " the card window numbers them with
-        while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) line.remove_prefix(1);
         size_t digits = 0;
         while (digits < line.size() && std::isdigit(static_cast<unsigned char>(line[digits]))) ++digits;
         if (digits > 0 && digits < line.size() && line[digits] == '.') line.remove_prefix(digits + 1);
-        while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) line.remove_prefix(1);
-        while (!line.empty() && (line.back() == ' ' || line.back() == '\t' || line.back() == '\r')) line.remove_suffix(1);
-        if (line.empty()) continue;
 
-        senses += std::format("<li style=\"list-style-type: &quot;{}&quot;;\">{}</li>", sense_marker(++n), escape(line));
+        std::string glosses;
+        while (!line.empty()){
+            const size_t semicolon = line.find(';');
+            const std::string_view gloss = trimmed(line.substr(0, semicolon));
+            if (!gloss.empty()) glosses += "<li>" + escape(gloss) + "</li>";
+            line = semicolon == std::string_view::npos ? std::string_view() : line.substr(semicolon + 1);
+        }
+        if (glosses.empty()) continue;
+
+        senses += std::format("<li data-sc-content=\"sense\" style=\"list-style-type: &quot;{}&quot;;\">"
+                              "<ul data-sc-content=\"glossary\">{}</ul></li>", sense_marker(++n), glosses);
     }
-    return senses.empty() ? "" : GLOSSARY_OPEN + senses + GLOSSARY_CLOSE;
+    end_group();
+    return groups.empty() ? "" : GLOSSARY_OPEN + groups + GLOSSARY_CLOSE;
 }
 
 std::vector<std::pair<std::string, std::string>> format_card(const CardContent& card, const AnkiSettings& settings){

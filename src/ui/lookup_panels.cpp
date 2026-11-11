@@ -172,18 +172,35 @@ void LookupPanels::on_translation_done(void* data){
     else self->set_panel({{result->translation}});
 }
 
-// A dictionary entry's meanings, one numbered line each
+// A dictionary entry's meanings as the card window shows them and
+// format_card() reads them: one numbered line each, under a line with
+// their parts of speech, e.g.
+//   [Noun]
+//   1. prey; catch; kill; game
 static std::string meanings(const JishoEntry& entry){
     std::string text;
+    // The last line of them written. A sense that names none has the ones
+    // before it.
+    std::string tags;
     int n = 1;
     for (const JishoSense& sense : entry.senses){
-        if (!text.empty()) text += '\n';
+        std::string line;
+        for (const std::string& part : sense.parts_of_speech){
+            if (!line.empty()) line += ' ';
+            line += '[' + part + ']';
+        }
+        if (!line.empty() && line != tags){
+            tags = line;
+            text += line + '\n';
+        }
         text += std::format("{}. ", n++);
         for (size_t i = 0; i < sense.definitions.size(); ++i){
             if (i > 0) text += "; ";
             text += sense.definitions[i];
         }
+        text += '\n';
     }
+    if (!text.empty()) text.pop_back();
     return text;
 }
 

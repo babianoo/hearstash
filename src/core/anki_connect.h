@@ -31,6 +31,14 @@ struct AnkiCardTemplate {
 void anki_create_model(const std::string& name, const std::vector<std::string>& fields, const std::string& css,
                        const std::vector<AnkiCardTemplate>& templates);
 
+// A note type's styling, and the kinds of card it makes
+std::string anki_model_css(const std::string& model);
+std::vector<AnkiCardTemplate> anki_model_templates(const std::string& model);
+// Replace them. Cards already made show the change too, since Anki draws
+// them from the note type each time. A template is found by its name.
+void anki_update_model_css(const std::string& model, const std::string& css);
+void anki_update_model_templates(const std::string& model, const std::vector<AnkiCardTemplate>& templates);
+
 struct AnkiNote {
     std::string deck;
     std::string model;

@@ -73,6 +73,38 @@ void anki_create_model(const std::string& name, const std::vector<std::string>& 
     });
 }
 
+std::string anki_model_css(const std::string& model){
+    const json result = request("modelStyling", {{"modelName", model}});
+    try {
+        return result.at("css").get<std::string>();
+    } catch (const json::exception& e){
+        throw std::runtime_error(std::format("Unexpected answer from AnkiConnect: {}", e.what()));
+    }
+}
+
+std::vector<AnkiCardTemplate> anki_model_templates(const std::string& model){
+    const json result = request("modelTemplates", {{"modelName", model}});
+    try {
+        std::vector<AnkiCardTemplate> templates;
+        for (const auto& [name, sides] : result.items())
+            templates.push_back({.name = name, .front = sides.at("Front").get<std::string>(),
+                                 .back = sides.at("Back").get<std::string>()});
+        return templates;
+    } catch (const json::exception& e){
+        throw std::runtime_error(std::format("Unexpected answer from AnkiConnect: {}", e.what()));
+    }
+}
+
+void anki_update_model_css(const std::string& model, const std::string& css){
+    request("updateModelStyling", {{"model", {{"name", model}, {"css", css}}}});
+}
+
+void anki_update_model_templates(const std::string& model, const std::vector<AnkiCardTemplate>& templates){
+    json cards = json::object();
+    for (const AnkiCardTemplate& t : templates) cards[t.name] = {{"Front", t.front}, {"Back", t.back}};
+    request("updateModelTemplates", {{"model", {{"name", model}, {"templates", cards}}}});
+}
+
 void anki_store_media(const std::string& filename, const std::vector<std::uint8_t>& data){
     request("storeMediaFile", {{"filename", filename}, {"data", base64_encode(data)}});
 }

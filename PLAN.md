@@ -263,10 +263,15 @@ Settings > Anki guesses the fields from their names (src/core/anki_fields.h,
 tested). Cards are tagged `hearstash`, and pictures are at most 480 px
 tall. Each part is formatted like the user's Yomitan cards
 (src/core/card_format.h): the looked-up word highlighted in the
-sentence, `word【reading】`, the meanings as a yomitan-glossary list,
-then `[sound:...]` and `<img alt="snapshot">`, in whichever fields the
-settings say. Jisho has no pitch accents, word audio or conjugations,
-so those parts of the template stay empty.
+sentence, `word【reading】`, the meanings as a yomitan-glossary list
+marked up like Jitendex's (senses grouped under part-of-speech badges,
+a gloss a line; the Meaning box writes the parts of speech as a
+`[Noun]` line above their senses), then `[sound:...]` and
+`<img alt="snapshot">`, in whichever fields the settings say. The
+Hearstash note type styles that markup, and one an older version added
+to Anki is updated with the next card unless the user changed it. Jisho
+has no pitch accents, word audio, conjugations or example sentences, so
+those parts stay empty.
 
 ### Windows
 

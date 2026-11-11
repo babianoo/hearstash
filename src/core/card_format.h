@@ -10,8 +10,10 @@
 struct CardContent {
     std::string word;       // The dictionary form, e.g. 悩む
     std::string reading;    // e.g. なやむ
-    // One sense a line. A "1. " in front of a line is dropped: the
-    // glossary numbers them itself.
+    // One sense a line, its glosses separated by ';', e.g.
+    // "1. prey; catch; kill". A "1. " in front of a line is dropped: the
+    // glossary numbers them itself. A line like "[Noun] [Suru verb]" gives
+    // the parts of speech of the senses under it, up to the next such line.
     std::string meaning;
     std::string sentence;
     // The part of sentence to highlight, as it's written there, e.g. 悩んでた.
@@ -31,9 +33,10 @@ struct CardContent {
 //
 // - the sentence, with the highlight in a bigger teal span
 // - the word and its reading as 悩む【なやむ】 when they share a field
-// - the meanings as Yomitan's glossary: a numbered ①②③ list in a
-//   left-aligned "yomitan-glossary" div, followed by the template's
-//   empty {conjugation} and {url}
+// - the meanings as Yomitan's glossary, laid out like Jitendex's: in a
+//   left-aligned "yomitan-glossary" div, the senses numbered ①②③ under
+//   their parts of speech, each gloss on a line of its own, followed by
+//   the template's empty {conjugation} and {url}
 // - the audio as [sound:...] and the picture as <img alt="snapshot">,
 //   like mpvacious adds them
 //
