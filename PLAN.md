@@ -188,6 +188,20 @@ timestamps are still to do.
   with the existing Jisho code, and show the result in a panel next to
   the transcript.
 - Jisho handles some inflected forms (食べた → 食べる), not all.
+- **Since replaced by a dictionary on the computer**: Jitendex, shipped
+  with the app as `jitendex.hsdict` (src/core/dictionary.h, made from its
+  zip by src/core/dictionary_import.h at build time and by the app when
+  it updates). A selection is looked up as written and as every
+  dictionary form it could be an inflection of (src/core/deinflect.h),
+  and if all of it isn't a word, ever less of its end is tried
+  (src/core/word_lookup.h). Jisho is only asked when there's no
+  dictionary file or it has nothing. A card gets the dictionary's whole
+  entry as HTML (src/core/structured_content.h, written from the format's
+  schema, not from Yomitan's GPL code) unless the Meaning box is edited.
+  The dictionary's licences (CC BY-SA 4.0; JMdict's asks for updates and
+  credits on a screen of their own) are why the app checks its age at
+  every start (src/ui/dictionary_updater.h) and has Settings > Sources.
+  Not done: pictures in entries, word audio, pitch accent.
 - Ignore selections that are only punctuation or spaces.
 
 Done when: selecting a word shows its reading and meaning. **This is the

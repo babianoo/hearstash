@@ -12,7 +12,8 @@ video, a stream). When you miss a line, press a shortcut and you can:
    check it,
 2. transcribe the selection with [whisper.cpp](https://github.com/ggml-org/whisper.cpp),
    which runs on your own machine,
-3. select any word in the transcript to look it up on Jisho,
+3. select any word in the transcript to look it up in the dictionary that
+   comes with the app, inflected or not (悩んでた finds 悩む),
 4. add it to Anki as a card with the sentence, the audio clip and a
    cropped screenshot of the moment.
 
@@ -48,6 +49,7 @@ Installed on the system:
 - libcurl
 - nlohmann_json 3.11 or newer
 - libjpeg-turbo
+- zlib, to read the dictionary's zip and pack the app's own dictionary file
 - pkg-config
 - On Linux: libpng, for screenshots from the desktop's screenshot portal
 - Optional, on Linux: `wayland-client`, for a clipboard that works under
@@ -117,6 +119,25 @@ cmake --build build-dist -j --target hearstash
 
 `build-dist/hearstash.exe` then runs on its own. It only uses DLLs that
 come with Windows 10 and 11.
+
+### The dictionary
+
+Configuring also fetches the latest [Jitendex](https://jitendex.org) zip
+(about 40 MB) into the build folder, and the build converts it to
+`jitendex.hsdict` next to the program, which takes about half a minute.
+That file is the dictionary the app ships with: **hand it out together
+with the program**, in the same folder. It's the one part of a build
+that isn't Hearstash's code, and it's under its own licence (see
+[Sources](#sources)).
+
+- The zip is fetched again once the copy in the build folder is a week
+  old, so a build to hand out has a current dictionary.
+- `-DHEARSTASH_DICTIONARY_ZIP=<zip>` converts a zip you already have
+  instead, e.g. where the build has no network.
+- `-DHEARSTASH_DICTIONARY=OFF` builds none. The app then looks words up
+  on jisho.org until it has downloaded the dictionary itself.
+- On Windows, the vcpkg triplet needs `zlib` too, and a build with
+  `--target hearstash` needs `--target dictionary` as well.
 
 ### Tests
 
@@ -254,6 +275,8 @@ runs while you watch, which can slow down a game.
 | Stashed lines | `%APPDATA%\Hearstash\stash` | `$XDG_STATE_HOME/Hearstash/stash` (`~/.local/state/Hearstash/stash`) |
 | Whisper models | `%LOCALAPPDATA%\Hearstash\models` | `$XDG_DATA_HOME/Hearstash/models` (`~/.local/share/Hearstash/models`) |
 | Screen reading models | the same, in `ocr` | the same, in `ocr` |
+| The dictionary it shipped with | `jitendex.hsdict`, next to `hearstash.exe` | next to `hearstash`, or in `../share/hearstash` from it |
+| A dictionary it updated to | `%LOCALAPPDATA%\Hearstash\dictionary` | `$XDG_DATA_HOME/Hearstash/dictionary` |
 
 An unreadable `settings.json` is renamed to `settings.json.bad` rather
 than overwritten.
@@ -267,8 +290,12 @@ The app listens to everything your computer plays, so:
   screenshot, about 3 MB for 30 seconds) stays on disk until you make a
   card from it or delete it, and only your user can read it.
 - Transcription and reading the screen run locally. Nothing is sent anywhere except what you
-  choose to look up (to Jisho, DeepL or MyMemory) and cards you add to
-  your own Anki.
+  choose to look up (to DeepL or MyMemory, or to Jisho when the
+  dictionary on your computer has nothing for it) and cards you add to
+  your own Anki. Words found in that dictionary are looked up without
+  sending anything.
+- When the dictionary is over 30 days old, the app asks jitendex.org
+  whether there's a newer one, which sends nothing but the request.
 - The one exception: with a DeepL key, each transcript and each text read
   on the screen is sent to DeepL to translate, without asking. Settings >
   General turns that off.
@@ -282,7 +309,45 @@ The app listens to everything your computer plays, so:
 - On Windows, screenshots use GDI; some hardware-accelerated video may
   come out black. DRM-protected video (Netflix and the like) always does.
 - No tray icon or start-with-Windows yet.
-- Jisho handles some inflected forms, not all. A local JMdict dictionary
-  with deinflection is planned.
+- Pictures in dictionary entries (a few hundred words have one) aren't
+  shown or put on cards.
+- Cards have no word audio or pitch accent: the dictionary has neither.
 
 See [PLAN.md](PLAN.md) for the rest.
+
+## Sources
+
+Hearstash looks words up in **Jitendex**, and its cards carry Jitendex's
+entries. The same credits are in the app, under Settings > Sources, with
+the dictionary's age and a button to get the latest one.
+
+- [Jitendex](https://jitendex.org), © Stephen Kraus, is used under the
+  [Creative Commons Attribution-ShareAlike 4.0 licence](https://creativecommons.org/licenses/by-sa/4.0/).
+  Hearstash converts it into one file, `jitendex.hsdict`, rearranged so a
+  word is found quickly; its text isn't changed. That file is under the
+  same licence, isn't encrypted, and its layout is described in
+  [src/core/dictionary.h](src/core/dictionary.h) and
+  [dictionary.cpp](src/core/dictionary.cpp), so you may copy, read and
+  share it on the same terms.
+- Jitendex is built from the [JMdict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project)
+  dictionary files. These files are the property of the
+  [Electronic Dictionary Research and Development Group](https://www.edrdg.org/),
+  and are used in conformance with the Group's
+  [licence](https://www.edrdg.org/edrdg/licence.html).
+- Its example sentences are from [Tatoeba](https://tatoeba.org), under
+  [CC BY 2.0 FR](https://creativecommons.org/licenses/by/2.0/fr/). On a
+  card, each sentence links to its page on Tatoeba, which names who
+  wrote it.
+- Which reading goes over which kanji is from
+  [JmdictFurigana](https://github.com/Doublevil/JmdictFurigana), under
+  CC BY-SA 4.0.
+
+The JMdict licence asks that software using the data keeps it up to
+date. A build ships with the Jitendex that was current when it was made,
+and the app looks for a newer one whenever the one it has is over 30
+days old, offering to download it. Settings > Sources does the same on
+demand.
+
+Without the dictionary file, or for a search it has nothing for (in
+English, say), words are looked up on [jisho.org](https://jisho.org)
+instead.
