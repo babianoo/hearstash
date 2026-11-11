@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,12 +14,15 @@
 //
 // On Linux it runs grim first, which works on wlroots desktops (Hyprland,
 // Sway); on Hyprland it asks hyprctl which monitor has the focus, and
-// elsewhere takes all of them. When grim can't (KDE, GNOME, X11, or it
-// isn't installed) it asks the desktop through the XDG Screenshot portal,
-// which takes all the monitors, and slower: about 2 s on KDE. On KDE
-// that's then cut down to the monitor with the focus, which KWin names,
-// where kscreen-doctor says it is; elsewhere it stays all of them. The
-// portal may ask the user once whether to allow it. On Windows it copies the
+// elsewhere takes all of them. On KDE it then asks KWin itself for the
+// monitor with the focus, which takes a few hundredths of a second, if
+// KWin lets the app. When neither can (GNOME, X11, a KWin that says no)
+// it asks the desktop through the XDG Screenshot portal, which takes all
+// the monitors, and slower: about 2 s on KDE, most of it the portal
+// saving a PNG file. On KDE that's then cut down to the monitor with the
+// focus, which KWin names, where kscreen-doctor says it is; elsewhere it
+// stays all of them. The portal may ask the user once whether to allow
+// it. On Windows it copies the
 // monitor with the foreground window through GDI, once a window of the
 // app's has opened (which makes the app DPI-aware, so the monitor's size
 // is in real pixels).
@@ -54,4 +58,11 @@ Rect monitor_in_screenshot(std::string_view layout_json, std::string_view output
 // Decodes a PNG file's bytes, as the screenshot portal saves them, to 8-bit
 // RGB. Throws std::runtime_error if it isn't one.
 Image parse_png(const std::vector<std::uint8_t>& data);
+
+// The pixels KWin hands over for a screenshot as an Image: height rows of
+// stride bytes, 4 bytes a pixel, in the Qt pixel format numbered format
+// (QImage::Format). Their alpha is left out: nothing is behind a screen.
+// Throws std::runtime_error if it's a format this doesn't know, or there
+// are too few pixels for the size.
+Image qt_pixels_to_image(std::span<const std::uint8_t> pixels, int width, int height, int stride, unsigned format);
 #endif

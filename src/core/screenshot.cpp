@@ -160,8 +160,11 @@ std::string focused_app(){
 
 #ifdef HAVE_SD_BUS
 #include <chrono>
+#include <iostream>
 #include <memory>
 #include <string_view>
+
+#include <poll.h>
 
 // D-Bus, for the screenshot portal
 #include <systemd/sd-bus.h>
@@ -297,6 +300,36 @@ Image parse_png(const std::vector<std::uint8_t>& data){
     return image;
 }
 
+Image qt_pixels_to_image(std::span<const std::uint8_t> pixels, int width, int height, int stride, unsigned format){
+    // Where red is in a pixel's 4 bytes; green is always the second, and
+    // blue is where red isn't. QImage::Format's numbers:
+    size_t red;
+    switch (format){
+        // RGB32, ARGB32, ARGB32_Premultiplied: 0xAARRGGBB as a number, so
+        // blue comes first in memory (on a little-endian machine)
+        case 4: case 5: case 6: red = 2; break;
+        // RGBX8888, RGBA8888, RGBA8888_Premultiplied: bytes in that order
+        case 16: case 17: case 18: red = 0; break;
+        default: throw std::runtime_error(std::format("the screenshot is in an unknown pixel format ({})", format));
+    }
+    if (width <= 0 || height <= 0 || stride / 4 < width
+        || pixels.size() / static_cast<size_t>(stride) < static_cast<size_t>(height))
+        throw std::runtime_error("the screenshot's pixels are cut short");
+
+    Image image{.width = width, .height = height, .rgb = {}};
+    image.rgb.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+    std::uint8_t* to = image.rgb.data();
+    for (int y = 0; y < height; ++y){
+        const std::uint8_t* from = pixels.data() + static_cast<size_t>(y) * static_cast<size_t>(stride);
+        for (int x = 0; x < width; ++x, from += 4, to += 3){
+            to[0] = from[red];
+            to[1] = from[1];
+            to[2] = from[2 - red];
+        }
+    }
+    return image;
+}
+
 // A screenshot from grim, of the focused monitor on Hyprland, or all of
 // them. Throws std::runtime_error if grim isn't installed or can't, as on
 // any desktop but a wlroots one.
@@ -334,6 +367,118 @@ struct Response {
     std::string uri;
     int error = 0;    // A negative errno if the signal couldn't be read
 };
+}
+
+// What KWin says of the picture it then writes to the pipe
+namespace {
+struct KWinPicture {
+    std::string type;
+    std::uint32_t width = 0, height = 0, stride = 0, format = 0;
+};
+
+// A file descriptor, closed when it goes out of scope
+struct Fd {
+    int fd = -1;
+    ~Fd(){ reset(); }
+    void reset(){
+        if (fd >= 0) close(fd);
+        fd = -1;
+    }
+};
+}
+
+// Reads the a{sv} KWin answers a capture with. Negative errno if it can't.
+static int read_kwin_picture(sd_bus_message* message, KWinPicture& picture){
+    int r = sd_bus_message_enter_container(message, 'a', "{sv}");
+    while (r > 0 && (r = sd_bus_message_enter_container(message, 'e', "sv")) > 0){
+        const char* key = nullptr;
+        const char* contents = nullptr;
+        r = sd_bus_message_read(message, "s", &key);
+        if (r >= 0) r = sd_bus_message_peek_type(message, nullptr, &contents);
+        if (r < 0) break;
+        const std::string_view name = key, type = contents ? contents : "";
+        std::uint32_t* number = name == "width" ? &picture.width : name == "height" ? &picture.height
+                              : name == "stride" ? &picture.stride : name == "format" ? &picture.format : nullptr;
+        if (number && type == "u") r = sd_bus_message_read(message, "v", "u", number);
+        else if (name == "type" && type == "s"){
+            const char* text = nullptr;
+            r = sd_bus_message_read(message, "v", "s", &text);
+            if (r >= 0) picture.type = text;
+        }
+        else r = sd_bus_message_skip(message, "v");
+        if (r >= 0) r = sd_bus_message_exit_container(message);
+    }
+    return r;
+}
+
+// A screenshot of the monitor with the focus straight from KWin
+// (org.kde.KWin.ScreenShot2), which is what the portal asks too on KDE.
+// KWin writes the pixels to a pipe as they are, so nothing is compressed,
+// saved and read back: a few hundredths of a second where the portal
+// takes 2 s. Without the mouse pointer.
+//
+// KWin decides who may: it's meant for programs whose .desktop file asks
+// for it (X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2).
+// Throws std::runtime_error if it says no, or this isn't KDE; denied then
+// says whether KWin was there to say it.
+static Image kwin_screenshot(bool& denied){
+    const auto fail = [](const char* what, int r){
+        return std::runtime_error(std::format("{}: {}", what, std::strerror(-r)));
+    };
+    denied = false;
+
+    sd_bus* opened = nullptr;
+    if (const int r = sd_bus_open_user(&opened); r < 0) throw fail("couldn't connect to D-Bus", r);
+    const Bus bus(opened);
+
+    int ends[2];
+    if (pipe2(ends, O_CLOEXEC) != 0) throw fail("couldn't make a pipe", -errno);
+    Fd from{ends[0]}, to{ends[1]};
+    // A 4K screen is 33 MB: fewer, bigger writes than 64 KB at a time. If
+    // it's refused, the pipe just stays as it was.
+    fcntl(to.fd, F_SETPIPE_SZ, 1 << 20);
+
+    // In the monitor's real pixels, not scaled to the desktop's
+    BusError error;
+    sd_bus_message* replied = nullptr;
+    if (sd_bus_call_method(bus.get(), "org.kde.KWin", "/org/kde/KWin/ScreenShot2", "org.kde.KWin.ScreenShot2",
+                           "CaptureActiveScreen", &error.error, &replied,
+                           "a{sv}h", 1, "native-resolution", "b", 1, to.fd) < 0){
+        // No KWin on the bus is another desktop, not a no
+        denied = !sd_bus_error_has_name(&error.error, SD_BUS_ERROR_SERVICE_UNKNOWN)
+              && !sd_bus_error_has_name(&error.error, SD_BUS_ERROR_NAME_HAS_NO_OWNER);
+        throw std::runtime_error(std::format("KWin didn't take a screenshot: {}",
+                                             error.error.message ? error.error.message : error.error.name));
+    }
+    const Message reply(replied);
+    // KWin has its own copy of the write end: with ours closed, the pipe
+    // ends when KWin is done, or gone
+    to.reset();
+
+    KWinPicture picture;
+    if (const int r = read_kwin_picture(reply.get(), picture); r < 0) throw fail("couldn't read KWin's answer", r);
+    // 16384 x 16384 at most: more isn't a screen
+    const size_t size = static_cast<size_t>(picture.stride) * picture.height;
+    if (picture.type != "raw" || picture.width == 0 || picture.height == 0 || picture.stride / 4 < picture.width
+        || picture.width > 16384 || picture.height > 16384 || picture.stride > 4 * 16384)
+        throw std::runtime_error("KWin's screenshot isn't one this can read");
+
+    std::vector<std::uint8_t> pixels(size);
+    size_t got = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (got < size){
+        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+        pollfd waiting{.fd = from.fd, .events = POLLIN, .revents = 0};
+        const int ready = left.count() > 0 ? poll(&waiting, 1, static_cast<int>(left.count())) : 0;
+        if (ready < 0 && errno == EINTR) continue;
+        if (ready <= 0) throw std::runtime_error("KWin didn't send the screenshot");
+        const ssize_t n = read(from.fd, pixels.data() + got, size - got);
+        if (n > 0) got += static_cast<size_t>(n);
+        else if (n == 0) throw std::runtime_error("KWin's screenshot is cut short");
+        else if (errno != EINTR) throw fail("couldn't read KWin's screenshot", -errno);
+    }
+    return qt_pixels_to_image(pixels, static_cast<int>(picture.width), static_cast<int>(picture.height),
+                              static_cast<int>(picture.stride), picture.format);
 }
 
 // sd-bus calls this with the Request's Response: a code (0 done, 1 the
@@ -509,6 +654,18 @@ Image take_screenshot(){
     }
 #ifdef HAVE_SD_BUS
     try {
+        bool denied = false;
+        try {
+            return kwin_screenshot(denied);
+        } catch (const std::runtime_error& e){
+            // The portal, then. Said once if KWin was there and said no,
+            // since that's the difference between a capture that opens at
+            // once and one that takes 2 s.
+            static bool said = false;
+            if (denied && !said)
+                std::cerr << std::format("{}. Asking the screenshot portal instead, which is slower.\n", e.what());
+            said = said || denied;
+        }
         // Asked first: the portal's dialog, when it shows one, could take
         // the focus
         const std::string output = kde_active_output();

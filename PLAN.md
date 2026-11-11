@@ -219,7 +219,11 @@ is kept between cards.
 Elsewhere (KDE, GNOME, X11) the XDG Screenshot portal does, over sd-bus,
 non-interactive: it saves a PNG of all the monitors (KDE and GNOME put it
 in ~/Pictures), which the app reads with libpng and deletes. On KDE that
-takes about 1.9 s for 5760x2160, nearly all of it the portal. Two changes from the plan:
+takes about 1.9 s for 5760x2160, nearly all of it the portal, so on KDE
+KWin is asked first, straight (org.kde.KWin.ScreenShot2,
+CaptureActiveScreen): it writes the focused monitor's pixels to a pipe,
+which takes about 30 ms for 3840x2160. The portal is what's left when
+KWin says no. Two changes from the plan:
 JPEG goes through libjpeg-turbo, which FLTK already uses, instead of
 `stb_image_write` (fetching stb as a new submodule was blocked in the
 session that built this; either works), and the shrinking before saving
@@ -288,8 +292,8 @@ Still to try by hand:
   and allows Yomitan-style lookup by hovering instead of selecting.
 - Whisper segment timestamps, so selecting a word can pick its sentence
   and that sentence's audio by itself.
-- Linux: a faster screenshot than the portal's on KDE, e.g. taking it on
-  a thread and opening the capture window before it's done, once it's
+- Linux: a faster screenshot than the portal's on GNOME, e.g. taking it
+  on a thread and opening the capture window before it's done, once it's
   clear when the portal has grabbed the screen. GNOME and X11 through the
   portal are untried.
 - Running in the background: start with Windows, a tray icon, closing to

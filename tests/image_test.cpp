@@ -1,4 +1,4 @@
-// Tests for core/image.h and parse_ppm(). No framework, like
+// Tests for core/image.h and screenshot.h's parsing. No framework, like
 // sample_ring_test.cpp.
 
 #include <cstdio>
@@ -184,6 +184,31 @@ static void test_monitor_in_screenshot(){
     CHECK(monitor_in_screenshot(turned, "A", 3000, 1920) == (Rect{.x = 0, .y = 0, .w = 1080, .h = 1920}));
     CHECK(monitor_in_screenshot(turned, "B", 3000, 1920) == (Rect{.x = 1080, .y = 0, .w = 1920, .h = 1080}));
 }
+
+static void test_qt_pixels(){
+    // 2 x 2, with 4 bytes of padding after each row: red, green, blue and
+    // white, as KWin's two formats lay them out
+    const std::vector<std::uint8_t> expected{255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255};
+    const std::vector<std::uint8_t> bgra{0, 0, 255, 255, 0, 255, 0, 255, 9, 9, 9, 9,
+                                         255, 0, 0, 255, 255, 255, 255, 255, 9, 9, 9, 9};
+    const std::vector<std::uint8_t> rgba{255, 0, 0, 255, 0, 255, 0, 255, 9, 9, 9, 9,
+                                         0, 0, 255, 255, 255, 255, 255, 255, 9, 9, 9, 9};
+    // ARGB32_Premultiplied and RGBA8888_Premultiplied
+    const Image from_bgra = qt_pixels_to_image(bgra, 2, 2, 12, 6);
+    CHECK(from_bgra.width == 2 && from_bgra.height == 2);
+    CHECK(from_bgra.rgb == expected);
+    CHECK(qt_pixels_to_image(rgba, 2, 2, 12, 18).rgb == expected);
+
+    bool threw = false;
+    try { qt_pixels_to_image(bgra, 2, 2, 12, 24); } catch (const std::runtime_error&){ threw = true; }    // Grayscale8
+    CHECK(threw);
+    threw = false;
+    try { qt_pixels_to_image(bgra, 2, 3, 12, 6); } catch (const std::runtime_error&){ threw = true; }     // A row short
+    CHECK(threw);
+    threw = false;
+    try { qt_pixels_to_image(bgra, 4, 2, 12, 6); } catch (const std::runtime_error&){ threw = true; }     // Rows too narrow
+    CHECK(threw);
+}
 #endif
 
 int main(){
@@ -196,6 +221,7 @@ int main(){
 #ifndef _WIN32
     test_png();
     test_monitor_in_screenshot();
+    test_qt_pixels();
 #endif
     if (failures == 0) std::puts("All image tests passed");
     return failures;

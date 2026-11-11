@@ -168,9 +168,15 @@ capture, which reads the text on the screen.
 ### Screenshots on Linux
 
 On wlroots desktops such as Hyprland or Sway, screenshots use
-[grim](https://sr.ht/~emersion/grim/) if it's installed. Elsewhere (KDE,
-GNOME, X11) they go through the desktop's screenshot portal
-(xdg-desktop-portal), which:
+[grim](https://sr.ht/~emersion/grim/) if it's installed. On KDE,
+Hearstash asks KWin itself for the monitor with the focus, which takes a
+few hundredths of a second. KWin decides which programs may: if it says
+no, Hearstash prints so once, and adding
+`X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` to the
+`.desktop` file that starts Hearstash lets it.
+
+Elsewhere (GNOME, X11, or a KWin that says no) screenshots go through
+the desktop's screenshot portal (xdg-desktop-portal), which:
 
 - may ask once whether Hearstash can take screenshots,
 - takes all your monitors, not just the one with the video, so crop to
@@ -232,8 +238,9 @@ The app listens to everything your computer plays, so:
 ## Known gaps
 
 - Adding a card to a running Anki hasn't been tried by hand yet.
-- On KDE and GNOME, the screenshot portal makes the capture window take
-  about 2 s to open.
+- On GNOME, and on KDE when KWin doesn't let Hearstash take screenshots
+  itself, the screenshot portal makes the capture window take about 2 s
+  to open.
 - On Windows, screenshots use GDI; some hardware-accelerated video may
   come out black. DRM-protected video (Netflix and the like) always does.
 - No tray icon or start-with-Windows yet.
