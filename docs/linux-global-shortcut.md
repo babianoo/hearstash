@@ -2,17 +2,18 @@
 
 ## Recommendation
 
-Register the capture shortcut through the XDG **GlobalShortcuts portal**
-(`org.freedesktop.portal.GlobalShortcuts`), and keep `hearstash --capture`
-as the fallback for desktops whose portal doesn't offer it. Not done yet;
-this note records the decision for when it is.
+Register the shortcuts through the XDG **GlobalShortcuts portal**
+(`org.freedesktop.portal.GlobalShortcuts`), and keep the commands
+(`hearstash --capture`, `--read-screen` and `--stash`) as the fallback
+for desktops whose portal doesn't offer it. Not done yet; this note
+records the decision for when it is.
 
 ## Today
 
 Wayland lets no app grab keys, so on Linux the user binds a key in their
-desktop to `hearstash --capture`. That command passes the press to the
-running app through a socket in `$XDG_RUNTIME_DIR`
-(`src/ui/global_hotkey.cpp`). It works everywhere, but the user has to find
+desktop to each of `hearstash --capture`, `hearstash --read-screen` and
+`hearstash --stash`. Each command passes the press to the running app
+through a socket in `$XDG_RUNTIME_DIR` (`src/ui/global_hotkey.cpp`). It works everywhere, but the user has to find
 their desktop's shortcut settings and type a command with the right path.
 On Windows the app registers the key itself (`RegisterHotKey`), so Linux is
 the odd one out.
@@ -22,9 +23,9 @@ the odd one out.
 The app asks the desktop for a shortcut over D-Bus and the desktop owns
 the key:
 
-1. `CreateSession`, then `BindShortcuts` with one shortcut, `capture`, and
-   a preferred trigger such as `Meta+Alt+C` (matching `Win+Alt+C` on
-   Windows).
+1. `CreateSession`, then `BindShortcuts` with three shortcuts, `capture`,
+   `read-screen` and `stash`, and preferred triggers such as `Meta+Alt+C`,
+   `Meta+Alt+X` and `Meta+Alt+Z` (matching the Windows defaults).
 2. The desktop shows a one-time dialog where the user accepts that key or
    picks another. No command to type.
 3. Each press arrives as an `Activated` signal on the session.
@@ -42,8 +43,8 @@ the key:
 | Sway, other wlroots | xdg-desktop-portal-wlr | No |
 
 Sway and friends are why the socket stays: the app tries the portal
-first, and only when it isn't there does Settings > Buffer show the
-command to bind, as it does now.
+first, and only when it isn't there does Settings > Shortcuts show the
+commands to bind, as it does now.
 
 ## Implementation sketch
 

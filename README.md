@@ -18,6 +18,12 @@ video, a stream). When you miss a line, press a shortcut and you can:
 
 The fast path is **shortcut → Enter → read**. Everything else is optional.
 
+If you'd rather not stop the show, a third shortcut **stashes** the line
+instead: it's saved without opening anything, with a short chime, and the
+stash button in the main window opens it after the episode, exactly as a
+capture would have. It can also be transcribed straight away, so the
+stash shows what each line says.
+
 For games and visual novels, a second shortcut reads the text on the
 screen instead (OCR, with [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)'s
 models, also on your own machine), into the same kind of window: look
@@ -152,19 +158,22 @@ Hover over a setting for more on what it does.
 
 ### The capture shortcuts
 
-There are two: the capture of what the computer played, and the screen
-capture, which reads the text on the screen.
+There are three: the capture of what the computer played, the screen
+capture, which reads the text on the screen, and the stash, which saves
+a capture for later.
 
-- **Windows**: `Win+Alt+C` and `Win+Alt+X` by default. Change them in
-  Settings > Shortcuts by pressing the new keys in their box.
+- **Windows**: `Win+Alt+C`, `Win+Alt+X` and `Win+Alt+Z` by default.
+  Change them in Settings > Shortcuts by pressing the new keys in their
+  box.
 - **Linux**: Wayland doesn't let apps grab keys, so bind keys in your
-  desktop to `hearstash --capture` and `hearstash --read-screen`, which
-  tell the running app to capture. Settings > Shortcuts shows the
-  commands with the right path. For Hyprland:
+  desktop to `hearstash --capture`, `hearstash --read-screen` and
+  `hearstash --stash`, which tell the running app what to do. Settings >
+  Shortcuts shows the commands with the right path. For Hyprland:
 
   ```
   bind = SUPER, A, exec, /path/to/hearstash --capture
   bind = SUPER, S, exec, /path/to/hearstash --read-screen
+  bind = SUPER, Z, exec, /path/to/hearstash --stash
   ```
 
   On KDE, add each command in System Settings > Shortcuts > Add New >
@@ -202,6 +211,25 @@ the desktop's screenshot portal (xdg-desktop-portal), which:
    screenshot to the video (the last crop is remembered), and press
    **Add**. Cards are tagged `hearstash`.
 
+## Using the stash
+
+1. While watching, press the stash shortcut. Nothing opens; a rising
+   chime says the line was kept, a low one that it wasn't (e.g. with the
+   buffer off; the stash window then says why). The whole buffer is kept,
+   with a screenshot.
+2. Afterwards, press the stash button (the tray, left of History) in the
+   main window. It shows how many lines are waiting, and lists them newest
+   first, with their screenshot, when, and how long.
+3. Double-click one, or press **Enter**, to open it in the capture
+   window, then go on as with a capture. Adding a card from it takes it
+   out of the stash. **Delete** removes one, **Clear All** all of them.
+
+With **Transcribe stashed lines right away** in Settings > Recording,
+each line's selection is transcribed in the background as soon as it's
+stashed: the stash shows what it says, and opening it shows the
+transcript without pressing Enter. It's off by default, since whisper then
+runs while you watch, which can slow down a game.
+
 ## Using a screen capture
 
 1. Press the screen capture shortcut in the game. The window opens with a
@@ -223,6 +251,7 @@ the desktop's screenshot portal (xdg-desktop-portal), which:
 | --- | --- | --- |
 | `settings.json` | `%APPDATA%\Hearstash` | `$XDG_CONFIG_HOME/Hearstash` (`~/.config/Hearstash`) |
 | `history.json` | `%APPDATA%\Hearstash` | `$XDG_STATE_HOME/Hearstash` (`~/.local/state/Hearstash`) |
+| Stashed lines | `%APPDATA%\Hearstash\stash` | `$XDG_STATE_HOME/Hearstash/stash` (`~/.local/state/Hearstash/stash`) |
 | Whisper models | `%LOCALAPPDATA%\Hearstash\models` | `$XDG_DATA_HOME/Hearstash/models` (`~/.local/share/Hearstash/models`) |
 | Screen reading models | the same, in `ocr` | the same, in `ocr` |
 
@@ -234,7 +263,9 @@ than overwritten.
 The app listens to everything your computer plays, so:
 
 - The buffer stays in memory and is never written to disk, except a clip
-  you add to a card.
+  you add to a card, and lines you stash. A stashed line (its audio and
+  screenshot, about 3 MB for 30 seconds) stays on disk until you make a
+  card from it or delete it, and only your user can read it.
 - Transcription and reading the screen run locally. Nothing is sent anywhere except what you
   choose to look up (to Jisho, DeepL or MyMemory) and cards you add to
   your own Anki.
@@ -245,7 +276,6 @@ The app listens to everything your computer plays, so:
 
 ## Known gaps
 
-- Adding a card to a running Anki hasn't been tried by hand yet.
 - On GNOME, and on KDE when KWin doesn't let Hearstash take screenshots
   itself, the screenshot portal makes the capture window take about 2 s
   to open.

@@ -88,7 +88,7 @@ PulseAudio (PipeWire's PulseAudio server works too), and checks every 3 s
 whether the default output changed, moving to the new one. The ring is
 `SampleRing` (src/core/sample_ring.h) with `GapDetector` for the silence,
 tested in tests/sample_ring_test.cpp. `Capturer` (src/ui/capturer.h)
-runs it from startup; Settings > Buffer turns it on or off and sets the
+runs it from startup; Settings > Recording turns it on or off and sets the
 length.
 
 **Windows: done.** `ma_device_type_loopback` on WASAPI, which miniaudio
@@ -119,7 +119,7 @@ capture window.
 desktop owns the shortcut: the user binds a key to `hearstash --capture`
 (e.g. `bind = SUPER, A, exec, /path/to/hearstash --capture` in
 hyprland.conf), which passes the press to the running app through a
-socket in `$XDG_RUNTIME_DIR`. Settings > Buffer shows the command with
+socket in `$XDG_RUNTIME_DIR`. Settings > Shortcuts shows the command with
 the right path. This works on X11 desktops too, so no `XGrabKey` was
 needed.
 
@@ -130,7 +130,7 @@ still arrive during Windows' own message loops (e.g. while a window is
 dragged), where thread messages are lost. The key is a setting
 (src/core/shortcut.h, tested), `Win+Alt+C` by default: nothing on
 Windows 11 uses it, and it has no AltGr in it, which types letters
-like ć in some layouts. Settings > Buffer takes a new one from the keys
+like ć in some layouts. Settings > Shortcuts takes a new one from the keys
 pressed in its box, and pauses the old one meanwhile. A key that's
 taken is reported there. `hearstash --capture` works on Windows too,
 by posting to that window, and a second copy of the app is told the
@@ -196,7 +196,7 @@ demo.**
 **Done** (no platform code). Spaces and punctuation around the selection
 are dropped first (src/core/lookup_text.h, tested). Also added:
 Translate (Ctrl+T) shows the whole line's DeepL translation in the same
-panel, using the DeepL key from Settings > API.
+panel, using the DeepL key from Settings > General.
 
 ### 6. Screenshot at the hotkey, and cropping
 
@@ -309,7 +309,8 @@ to other people. It has the same icon as japanese-helper.
 Still to try by hand:
 
 - A capture of a real line, with sound playing: the waveform, the
-  transcript, and a card in a running Anki (also untried on Linux).
+  transcript, and a card in a running Anki. On Linux all of it works,
+  cards included (tried by hand, November 2026).
 - Screenshots of video in a browser and in mpv: if any is black, switch
   to DXGI Desktop Duplication.
 - Plugging in headphones while it records, to see miniaudio follow the
@@ -376,7 +377,7 @@ below).
 around them that needs no model is in src/core/ocr_text.h, tested.
 
 A screen capture has its own shortcut (`hearstash --read-screen` on
-Linux, `Win+Alt+X` on Windows, set in Settings > Screen Text) and its own
+Linux, `Win+Alt+X` on Windows, set in Settings > Shortcuts) and its own
 window, `ScreenWindow`: the capture window's twin, with the screenshot
 where the waveform is, and the same text, lookup, Translate and Add to
 Anki below (`LookupPanels`, src/ui/lookup_panels.h, shared by both). The
@@ -549,7 +550,7 @@ up in the buffer for the next 30 s; it's short and quiet, and comes
 after the line. On GNOME the screenshot portal may show a dialog, which
 interrupts; not solved yet.
 
-**Transcribing when stashed** (Settings > Stash, off by default): right
+**Transcribing when stashed** (Settings > Recording, off by default): right
 after a line is saved, its selection (the end the capture window would
 select) goes to whisper in the background, on the shared model, so the
 capture window and the search bar wait their turn behind it. The
@@ -559,6 +560,26 @@ transcribes again, e.g. after changing the selection. Off by default
 because whisper then runs while the user is still watching: CPU, or the
 GPU and its memory, taken from a game. Lines stashed while it was off
 stay untranscribed.
+
+**Possible: Transcribe All** in the stash window, for the lines that
+weren't transcribed when stashed (the option was off, or the app quit
+first). Not built yet. To decide first:
+
+- **How much of each line**: the same as transcribing when stashed,
+  whichever it is, so two lines in the list never mean different things.
+  The selection (the last 8 s by default) is cheap and ready to be a
+  card's sentence, but nobody checks it before it's transcribed, so a
+  stash pressed late transcribes the wrong part. The whole buffer always
+  has the line, but costs about three times as much per line, invites
+  whisper to make up text over music, and is too long for a card unless
+  whisper's segment timestamps (under "Later") split it into sentences
+  that can be picked to set the selection.
+- **What was transcribed**: stash.json would say which part, e.g.
+  `"transcribed": {"from": 22.0, "to": 30.0}` in seconds, not only yes or
+  no. Then Transcribe All skips the lines that are done, and lines
+  transcribed the old way can be told apart if the part changes.
+- **One at a time**: a queue that transcribes the lines in turn, not a
+  thread per line all waiting for the model, each with its audio loaded.
 
 ## Settings to add
 
