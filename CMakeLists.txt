@@ -153,6 +153,7 @@ add_executable(hearstash
     src/core/dictionary.cpp
     src/core/dictionary_files.cpp
     src/core/dictionary_import.cpp
+    src/core/frequency_list.cpp
     src/core/jisho.cpp
     src/core/local_time.cpp
     src/core/lookup_text.cpp
@@ -187,6 +188,7 @@ add_executable(hearstash
     src/ui/dictionary_updater.cpp
     src/ui/filter_bar.cpp
     src/ui/fit_line.cpp
+    src/ui/frequency_downloader.cpp
     src/ui/global_hotkey.cpp
     src/ui/history_store.cpp
     src/ui/history_table.cpp
@@ -421,8 +423,8 @@ add_test(NAME deinflect COMMAND deinflect_test)
 # With what looks words up in it too
 add_executable(dictionary_test tests/dictionary_test.cpp ${DICTIONARY_SOURCES}
                src/core/anki_fields.cpp src/core/card_format.cpp src/core/config_dir.cpp src/core/deinflect.cpp
-               src/core/dictionary_files.cpp src/core/jisho.cpp src/core/structured_content.cpp
-               src/core/word_lookup.cpp)
+               src/core/dictionary_files.cpp src/core/frequency_list.cpp src/core/jisho.cpp
+               src/core/structured_content.cpp src/core/word_lookup.cpp)
 target_compile_options(dictionary_test PRIVATE -Wall -Wextra)
 target_include_directories(dictionary_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(dictionary_test PRIVATE ZLIB::ZLIB CURL::libcurl nlohmann_json::nlohmann_json)

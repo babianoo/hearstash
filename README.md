@@ -277,6 +277,7 @@ runs while you watch, which can slow down a game.
 | Screen reading models | the same, in `ocr` | the same, in `ocr` |
 | The dictionary it shipped with | `jitendex.hsdict`, next to `hearstash.exe` | next to `hearstash`, or in `../share/hearstash` from it |
 | A dictionary it updated to | `%LOCALAPPDATA%\Hearstash\dictionary` | `$XDG_DATA_HOME/Hearstash/dictionary` |
+| The frequency list, once downloaded | `frequencies.hsfreq`, in the same folder | the same |
 
 An unreadable `settings.json` is renamed to `settings.json.bad` rather
 than overwritten.
@@ -351,3 +352,17 @@ demand.
 Without the dictionary file, or for a search it has nothing for (in
 English, say), words are looked up on [jisho.org](https://jisho.org)
 instead.
+
+### Word frequency
+
+Settings > Sources can also download **JPDBv2㋕**, a frequency list in
+Yomitan's format from
+[Kuuuube's yomitan-dictionaries](https://github.com/Kuuuube/yomitan-dictionaries),
+built from [jpdb.io](https://jpdb.io)'s frequency list by jpdb, Kuuube
+and Gecko. Each word is then shown with it the way Yomitan shows it, e.g.
+`JPDBv2㋕ 312, 19896㋕` for 読む: its rank among the words in jpdb.io's
+corpus (lower is more common) and, marked ㋕, its rank when it's written
+in kana. Its licence isn't stated, so it isn't shipped with Hearstash:
+the app downloads it (about 6 MB, checked against its SHA-1) only when
+you press Download, and converts it to `frequencies.hsfreq`, whose layout
+is described in [src/core/frequency_list.h](src/core/frequency_list.h).

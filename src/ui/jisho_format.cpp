@@ -14,6 +14,8 @@ static const TextStyle NUMBER{FL_HELVETICA, 14, DIM};
 static const TextStyle DEFINITION{};
 static const TextStyle PART_OF_SPEECH{FL_HELVETICA_ITALIC, 12, DIM};
 static const TextStyle OTHER_FORMS{FL_HELVETICA, 13, DIM};
+static const TextStyle FREQUENCY_SOURCE{FL_HELVETICA_BOLD, 12, fl_rgb_color(30, 110, 130)};
+static const TextStyle FREQUENCY{FL_HELVETICA, 12, DIM};
 
 static std::string join(const std::vector<std::string>& parts, std::string_view separator){
     std::string joined;
@@ -26,7 +28,7 @@ static std::string join(const std::vector<std::string>& parts, std::string_view 
 
 // The results, styled a bit like jisho.org:
 //
-//   兄弟  きょうだい  common word          (big bold word, grey reading)
+//   兄弟  きょうだい  common word  JPDBv2㋕ <rank>   (big bold word, grey reading)
 //       1. brothers and sisters; siblings  Noun
 //       Other forms: 兄弟 (けいてい)
 std::vector<TextSpan> format_entries(const std::vector<WordEntry>& entries){
@@ -43,6 +45,11 @@ std::vector<TextSpan> format_entries(const std::vector<WordEntry>& entries){
             }
         }
         if (entry.is_common) spans.push_back({"  common word", COMMON});
+        // As Yomitan shows it: JPDBv2㋕ 312, 19896㋕
+        if (!entry.frequencies.empty()){
+            spans.push_back({"  " + entry.frequency_source + " ", FREQUENCY_SOURCE});
+            spans.push_back({join(entry.frequencies, ", "), FREQUENCY});
+        }
         spans.push_back({"\n"});
 
         int n = 1;

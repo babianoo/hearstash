@@ -11,6 +11,7 @@
 #include "core/word_entry.h"
 
 class Dictionary;
+class FrequencyList;
 
 // Looking a word up: in the dictionary file on this computer if there is
 // one, which also finds a word from an inflected form of it, and on
@@ -56,9 +57,14 @@ std::shared_ptr<const Dictionary> current_dictionary();
 // there. Lookups already running keep the one they have.
 void reload_dictionary();
 
+// Fills in each entry's frequencies from list, for its first form, as
+// Yomitan shows a frequency dictionary's beside a word
+void add_frequencies(const FrequencyList& list, std::vector<WordEntry>& entries);
+
 // Looks text up in current_dictionary(), like look_up_in(). If there's no
 // dictionary, or it has nothing, on jisho.org instead, which also takes
-// English and romaji. Blocks while that request runs, so not on the UI
+// English and romaji. Either way, with frequencies from
+// current_frequencies() if there's a list. Blocks while that runs, so not on the UI
 // thread. Throws std::runtime_error if jisho.org was needed and couldn't
 // be reached, or what look_up_in() throws.
 WordLookup look_up_word(std::string_view text, bool from_start);

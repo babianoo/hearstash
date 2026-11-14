@@ -13,6 +13,7 @@
 #include "core/deinflect.h"
 #include "core/dictionary.h"
 #include "core/dictionary_files.h"
+#include "core/frequency_list.h"
 #include "core/jisho.h"
 #include "core/structured_content.h"
 
@@ -281,12 +282,24 @@ void reload_dictionary(){
     current_loaded = false;
 }
 
-WordLookup look_up_word(std::string_view text, bool from_start){
-    if (const std::shared_ptr<const Dictionary> dictionary = current_dictionary()){
-        WordLookup found = look_up_in(*dictionary, text, from_start);
-        if (!found.entries.empty()) return found;
+void add_frequencies(const FrequencyList& list, std::vector<WordEntry>& entries){
+    for (WordEntry& entry : entries){
+        if (entry.forms.empty()) continue;
+        const WordForm& main = entry.forms.front();
+        // A word written in kana is its own reading
+        entry.frequencies = list.find(main.word.empty() ? main.reading : main.word, main.reading);
+        if (!entry.frequencies.empty()) entry.frequency_source = list.info().title;
     }
-    WordLookup found{.entries = jisho_search(text), .matched = {}};
-    if (!found.entries.empty()) found.matched = text;
+}
+
+WordLookup look_up_word(std::string_view text, bool from_start){
+    WordLookup found;
+    if (const std::shared_ptr<const Dictionary> dictionary = current_dictionary())
+        found = look_up_in(*dictionary, text, from_start);
+    if (found.entries.empty()){
+        found = {.entries = jisho_search(text), .matched = {}};
+        if (!found.entries.empty()) found.matched = text;
+    }
+    if (const std::shared_ptr<const FrequencyList> list = current_frequencies()) add_frequencies(*list, found.entries);
     return found;
 }

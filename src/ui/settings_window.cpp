@@ -29,6 +29,7 @@
 #include "ui/category_button.h"
 #include "ui/clipboard_input.h"
 #include "ui/dictionary_updater.h"
+#include "ui/frequency_downloader.h"
 #include "ui/global_hotkey.h"
 #include "ui/history_store.h"
 #include "ui/icons.h"
@@ -192,6 +193,7 @@ SettingsWindow::SettingsWindow(SettingsStore& settings, HistoryStore& history, M
     // After the Capturer's own listener, which applies the change first
     settings_listener = settings.add_listener([this]{ refresh_buffer(); });
     dictionary_listener = dictionary.add_listener([this]{ refresh_sources(); });
+    frequencies = std::make_unique<FrequencyDownloader>([this]{ refresh_sources(); });
 }
 
 SettingsWindow::~SettingsWindow(){
@@ -1086,6 +1088,29 @@ void SettingsWindow::add_sources(int x, int w){
                                           "this one is over {} days old.", DICTIONARY_MAX_AGE_DAYS));
     y += MODEL_BTN_H + GROUP_GAP;
 
+    // The frequency list, laid out the same
+    Fl_Box* frequency_label = new Fl_Box(left, y, LABEL_W, 20, "Frequency");
+    frequency_label->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    frequency_name = new Fl_Box(left + LABEL_W, y, right - left - LABEL_W, 20);
+    frequency_name->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    set_tip({frequency_label, frequency_name},
+            std::format("How common each word is, shown beside it as Yomitan shows it, e.g. \"{} 312, 19896㋕\" "
+                        "for 読む: its rank among the words on jpdb.io, lower being more common, and with ㋕ "
+                        "its rank written in kana.", FREQUENCY_TITLE));
+    y += 20 + 6;
+    frequency_status = dim_line(left, y, btn_x - 8 - left, MODEL_BTN_H);
+    frequency_progress = new Fl_Progress(left, y + (MODEL_BTN_H - 18) / 2, btn_x - 8 - left, 18);
+    frequency_progress->minimum(0);
+    frequency_progress->maximum(1);
+    frequency_progress->selection_color(ACCENT);
+    frequency_progress->labelsize(12);
+    frequency_progress->hide();
+    frequency_btn = new Fl_Button(btn_x, y, DICTIONARY_BTN_W, MODEL_BTN_H);
+    frequency_btn->box(FL_ROUND_UP_BOX);
+    frequency_btn->clear_visible_focus();
+    frequency_btn->callback(on_frequency_action, this);
+    y += MODEL_BTN_H + GROUP_GAP;
+
     credits_scroll = new SmoothScroll(left, y, right - left, win.h() - MARGIN - y);
     credits_scroll->box(FL_FLAT_BOX);
     credits_scroll->color(FL_BACKGROUND_COLOR);
@@ -1100,10 +1125,26 @@ void SettingsWindow::on_dictionary_action(Fl_Widget*, void* data){
     else self->dictionary.update();
 }
 
+void SettingsWindow::on_frequency_action(Fl_Widget*, void* data){
+    SettingsWindow* self = static_cast<SettingsWindow*>(data);
+    FrequencyDownloader& frequencies = *self->frequencies;
+    if (frequencies.busy()){
+        frequencies.cancel();
+    } else if (frequencies.installed()){
+        // Modal: 0 is the first button, and Escape
+        if (fl_choice("%s", "Keep it", "Delete", nullptr,
+                      "Delete the frequency list? Words are then shown without how common they are.") == 1)
+            frequencies.remove();
+    } else {
+        frequencies.download();
+    }
+}
+
 // Where the dictionary is from, as its licences ask to be told: Jitendex's
 // (CC BY-SA 4.0), and those of what it's built from. file is the app's
 // copy of it, empty if there's none.
-static std::vector<TextSpan> credit_spans(const DictionaryInfo* info, const std::string& file){
+static std::vector<TextSpan> credit_spans(const DictionaryInfo* info, const std::string& file,
+                                          const FrequencyInfo* frequency){
     std::vector<TextSpan> spans;
     const auto heading = [&](const char* text){ spans.push_back({std::string(text) + '\n', CREDIT_HEADING}); };
     const auto line = [&](const std::string& text){ spans.push_back({text + '\n', CREDIT}); };
@@ -1139,6 +1180,16 @@ static std::vector<TextSpan> credit_spans(const DictionaryInfo* info, const std:
         spans.push_back({info->attribution + "\n\n", CREDIT_SMALL});
     }
 
+    heading(FREQUENCY_TITLE);
+    line(std::format("How common words are comes from {}, Kuuube's Yomitan dictionary of jpdb.io's frequency "
+                     "list, by jpdb, Kuuube and Gecko. Its licence isn't stated, so Hearstash doesn't come with it: "
+                     "it's downloaded from where Kuuube publishes it when you ask for it.", FREQUENCY_TITLE));
+    link("jpdb.io\ngithub.com/Kuuuube/yomitan-dictionaries");
+    if (frequency && !frequency->attribution.empty()){
+        heading("In its own words");
+        spans.push_back({frequency->attribution + "\n\n", CREDIT_SMALL});
+    }
+
     heading("jisho.org");
     line("Without the dictionary file, or when it has nothing for a search, such as one in English, words are "
          "looked up on jisho.org instead.");
@@ -1146,8 +1197,9 @@ static std::vector<TextSpan> credit_spans(const DictionaryInfo* info, const std:
 }
 
 void SettingsWindow::refresh_sources(){
-    // Laying out text needs the window on screen
-    if (!win.shown()) return;
+    // Laying out text needs the window on screen. frequencies is null while
+    // the constructor makes it.
+    if (!win.shown() || !frequencies) return;
     const DictionaryUpdater::State& state = dictionary.state();
     const std::optional<DictionaryInfo>& info = dictionary.installed();
     using Status = DictionaryUpdater::Status;
@@ -1188,19 +1240,60 @@ void SettingsWindow::refresh_sources(){
     }
     dictionary_btn->copy_label(dictionary.busy() ? "Cancel" : info ? "Check for updates" : "Download");
 
+    // The frequency list, like the dictionary
+    using FrequencyStatus = FrequencyDownloader::Status;
+    const FrequencyDownloader::State& frequency_state = frequencies->state();
+    const std::optional<FrequencyInfo>& frequency = frequencies->installed();
+    frequency_name->copy_label(frequency ? frequency->title.c_str() : "None installed");
+    frequency_status->labelcolor(DIM);
+    frequency_status->tooltip(nullptr);
+    if (frequency_state.status == FrequencyStatus::Downloading){
+        frequency_status->hide();
+        frequency_progress->show();
+        const double done = frequency_state.total
+            ? static_cast<double>(frequency_state.done) / static_cast<double>(frequency_state.total) : 0;
+        frequency_progress->value(static_cast<float>(done));
+        frequency_progress->copy_label(frequency_state.total
+            ? std::format("Downloading {}%", static_cast<int>(done * 100)).c_str() : "Downloading...");
+    } else {
+        frequency_progress->hide();
+        frequency_status->show();
+        if (frequency_state.status == FrequencyStatus::Converting){
+            frequency_status->copy_label("Converting...");
+        } else if (frequency_state.status == FrequencyStatus::Loading){
+            frequency_status->copy_label("...");
+        } else if (frequency_state.status == FrequencyStatus::Failed){
+            frequency_status->copy_label("Couldn't download");
+            frequency_status->labelcolor(ERROR_COLOR);
+            frequency_status->copy_tooltip(frequency_state.error.c_str());
+        } else if (frequency){
+            frequency_status->copy_label("Shown beside each word");
+        } else {
+            frequency_status->copy_label(std::format("{} from jpdb.io, about 6 MB", FREQUENCY_TITLE).c_str());
+        }
+    }
+    frequency_btn->copy_label(frequencies->busy() ? "Cancel" : frequency ? "Delete" : "Download");
+    frequency_btn->activate();
+    if (frequency_state.status == FrequencyStatus::Loading) frequency_btn->deactivate();
+
     // Only when it's another dictionary: setting the text scrolls it back
     // to the top
     const std::string file = dictionary.installed_path().string();
-    const std::string key = (info ? info->title : std::string()) + '\n' + file;
+    const std::string key = (info ? info->title : std::string()) + '\n' + file + '\n'
+                          + (frequency ? frequency->revision : std::string());
     if (key != credits_for || credits_for.empty()){
         credits_for = key;
         credits_scroll->scroll_to_top();
-        credits->text(credit_spans(info ? &*info : nullptr, file));
+        credits->text(credit_spans(info ? &*info : nullptr, file, frequency ? &*frequency : nullptr));
     }
 
     dictionary_name->redraw();
     dictionary_status->redraw();
     dictionary_progress->redraw();
     dictionary_btn->redraw();
+    frequency_name->redraw();
+    frequency_status->redraw();
+    frequency_progress->redraw();
+    frequency_btn->redraw();
     credits_scroll->redraw();
 }

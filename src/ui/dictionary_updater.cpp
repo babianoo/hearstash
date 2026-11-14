@@ -9,6 +9,7 @@
 #include <FL/Fl.H>
 #include <FL/fl_ask.H>
 
+#include "core/frequency_list.h"
 #include "core/settings.h"
 #include "core/word_lookup.h"
 #include "ui/settings_store.h"
@@ -67,6 +68,8 @@ void DictionaryUpdater::start(bool at_start, bool may_offer, std::optional<Dicti
 
         // Opens the dictionary if nothing has yet, which takes a moment
         std::shared_ptr<const Dictionary> dictionary = current_dictionary();
+        // And the frequency list, for the same reason
+        current_frequencies();
         const auto post_installed = [&](State state){
             Update update{.updater = this, .state = std::move(state), .looked = true};
             if (dictionary){

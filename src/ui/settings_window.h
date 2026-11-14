@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@
 class Capturer;
 class ClipboardInput;
 class DictionaryUpdater;
+class FrequencyDownloader;
 class HistoryStore;
 class ModelDownloader;
 class SettingsStore;
@@ -44,8 +46,9 @@ struct WhisperModel;
 // add cards to, which field gets each part of a card, both listed from
 // Anki, and the picture's quality. The Sources page, set apart at the
 // bottom of the sidebar, says which dictionary words are looked up in, how
-// old it is, with a button to get the latest, and credits where it's from
-// as its licences ask.
+// old it is, with a button to get the latest; then the frequency list
+// shown beside each word, with a button to download or delete it; and
+// credits where they're from as their licences ask.
 //
 // Each setting is one short line; what it does in more detail is in its
 // tooltip. Changes go into the SettingsStore it was given as they're made,
@@ -161,6 +164,12 @@ private:
     Fl_Progress* dictionary_progress = nullptr;
     // Check for updates, or Cancel
     Fl_Button* dictionary_btn = nullptr;
+    // Under them, the same for the frequency list, whose button downloads
+    // it, cancels that, or deletes it
+    Fl_Box* frequency_name = nullptr;
+    Fl_Box* frequency_status = nullptr;
+    Fl_Progress* frequency_progress = nullptr;
+    Fl_Button* frequency_btn = nullptr;
     // Where the dictionary is from and under which licences. The text is
     // the scroll's only child.
     SmoothScroll* credits_scroll = nullptr;
@@ -168,6 +177,8 @@ private:
     // What credits was last filled in for, to only do it again when the
     // dictionary changes
     std::string credits_for;
+    // Last, so what its listener touches is there before it and after it
+    std::unique_ptr<FrequencyDownloader> frequencies;
 
     // Static because FLTK callbacks are plain functions; the
     // SettingsWindow comes in through data.
@@ -196,6 +207,7 @@ private:
     static void on_anki_reload(Fl_Widget* w, void* data);
     static void on_quality(Fl_Widget* w, void* data);
     static void on_dictionary_action(Fl_Widget* w, void* data);
+    static void on_frequency_action(Fl_Widget* w, void* data);
 
     // Add a page's settings to the current group, a page starting at x
     // that's w wide

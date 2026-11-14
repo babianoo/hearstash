@@ -1,6 +1,6 @@
-// Tests for ZipArchive, import_dictionary(), Dictionary, look_up_in() and
-// dictionary_age_days(), on a small made-up dictionary in Yomitan's
-// format. No framework, like sample_ring_test.cpp.
+// Tests for ZipArchive, import_dictionary(), Dictionary, look_up_in(),
+// dictionary_age_days() and the frequency list, on small made-up
+// dictionaries in Yomitan's format. No framework, like sample_ring_test.cpp.
 
 #include <chrono>
 #include <cstdio>
@@ -20,6 +20,7 @@
 #include "core/dictionary.h"
 #include "core/dictionary_files.h"
 #include "core/dictionary_import.h"
+#include "core/frequency_list.h"
 #include "core/word_lookup.h"
 #include "core/zip_archive.h"
 
@@ -397,6 +398,70 @@ static void test_age(){
     CHECK(is_newer({.title = "", .revision = "2026.09.01.0", .download_url = ""}, nullptr));
 }
 
+// A frequency dictionary shaped like JPDBv2㋕, in two banks, with a pitch
+// accent row among them that isn't a frequency
+static void test_frequencies(const fs::path& folder){
+    const json index = {{"title", "JPDBv2㋕"}, {"revision", "JPDB v2.2 Frequency Kana 2024-10-13"}, {"format", 3},
+                        {"author", "jpdb, Kuuube, Gecko"}, {"frequencyMode", "rank-based"}};
+    const json bank1 = json::parse(R"([
+        ["の", "freq", {"value": 1, "displayValue": "1㋕"}],
+        ["読む", "freq", {"reading": "よむ", "frequency": {"value": 312, "displayValue": "312"}}],
+        ["仮名", "freq", {"reading": "かな", "frequency": {"value": 24501, "displayValue": "24501㋕"}}],
+        ["読む", "freq", {"reading": "よむ", "frequency": {"value": 19896, "displayValue": "19896㋕"}}],
+        ["読む", "pitch", {"reading": "よむ", "pitches": [{"position": 1}]}]
+    ])");
+    const json bank2 = json::parse(R"([
+        ["よむ", "freq", {"value": 19896, "displayValue": "19896㋕"}],
+        ["仮名", "freq", {"reading": "かな", "frequency": {"value": 34143, "displayValue": "34143"}}],
+        ["仮名", "freq", {"reading": "かめい", "frequency": 82902}],
+        ["猫", "freq", 1500],
+        ["犬", "freq", "very common"]
+    ])");
+    const fs::path zip = folder / "frequencies.zip";
+    write_file(zip, make_zip({{"index.json", index.dump(), false}, {"term_meta_bank_2.json", bank2.dump(), true},
+                              {"term_meta_bank_1.json", bank1.dump(), true}}));
+    const fs::path file = folder / "made" / "test.hsfreq";
+    const FrequencyInfo info = import_frequencies(zip, file);
+    CHECK(info.title == "JPDBv2㋕" && info.revision == "JPDB v2.2 Frequency Kana 2024-10-13");
+    CHECK(!fs::exists(file.string() + ".part"));
+
+    const FrequencyList list(file);
+    CHECK(list.info().title == "JPDBv2㋕" && list.info().author == "jpdb, Kuuube, Gecko");
+    CHECK(list.size() == 9);
+    // As Yomitan shows them, in the dictionary's order
+    using Shown = std::vector<std::string>;
+    CHECK(list.find("読む", "よむ") == Shown({"312", "19896㋕"}));
+    CHECK(list.find("よむ", "よむ") == Shown({"19896㋕"}));
+    CHECK(list.find("よむ", "") == Shown({"19896㋕"}));
+    CHECK(list.find("仮名", "かな") == Shown({"24501㋕", "34143"}));
+    CHECK(list.find("仮名", "かめい") == Shown({"82902"}));
+    CHECK(list.find("猫", "ねこ") == Shown({"1500"}));
+    CHECK(list.find("犬", "いぬ") == Shown({"very common"}));
+    CHECK(list.find("読む", "どく").empty());
+    CHECK(list.find("書く", "かく").empty());
+    CHECK(list.find("", "").empty());
+
+    // On entries, for each one's first form
+    std::vector<WordEntry> entries(3);
+    entries[0].forms = {{"読む", "よむ"}, {"讀む", "よむ"}};
+    entries[1].forms = {{"", "の"}};
+    entries[2].forms = {{"書く", "かく"}};
+    add_frequencies(list, entries);
+    CHECK(entries[0].frequency_source == "JPDBv2㋕" && entries[0].frequencies == Shown({"312", "19896㋕"}));
+    CHECK(entries[1].frequencies == Shown({"1㋕"}));
+    CHECK(entries[2].frequencies.empty() && entries[2].frequency_source.empty());
+
+    // Not one, or damaged
+    write_file(folder / "no_freq.zip", make_zip({{"index.json", index.dump(), false}}));
+    CHECK(THROWS(import_frequencies(folder / "no_freq.zip", folder / "made" / "none.hsfreq")));
+    CHECK(THROWS(import_frequencies(make_dictionary_zip(folder), folder / "made" / "none.hsfreq")));
+    std::string bytes = read_file(file);
+    write_file(folder / "cut.hsfreq", bytes.substr(0, bytes.size() - 10));
+    CHECK(THROWS(FrequencyList(folder / "cut.hsfreq")));
+    CHECK(THROWS(FrequencyList(folder / "made" / "test.hsdict")));
+    CHECK(THROWS(FrequencyList(folder / "missing.hsfreq")));
+}
+
 int main(){
     const fs::path folder = fs::temp_directory_path() / std::format("hearstash_dictionary_test_{}",
         std::chrono::steady_clock::now().time_since_epoch().count());
@@ -406,6 +471,7 @@ int main(){
         test_import(folder);
         test_lookup(folder);
         test_age();
+        test_frequencies(folder);
     } catch (const std::exception& e){
         std::fprintf(stderr, "Threw: %s\n", e.what());
         ++failures;
